@@ -1,38 +1,39 @@
-// Importação de hooks do React para gerir o estado (dados que podem mudar) do componente
+// Importação dos hooks do React (useState para gerir variáveis de estado)
 import { useState } from 'react';
-// Importação de componentes visuais do React Native
-// SafeAreaView: Garante que o conteúdo não fica escondido atrás das bordas/notches dos telemóveis
-// Alert: Para mostrar pop-ups nativos do sistema
+// Importação dos componentes base do React Native para construir a interface
 import { Alert, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-// Importação do ficheiro de estilos separado (Clean Code)
+
+// Importação das nossas constantes de texto (Strings) para não termos texto "hardcoded"
+import { Strings } from '../constants/Strings';
+// Importação dos estilos separados para manter o ficheiro limpo
 import { styles } from './styles/LoginScreenStyles';
 
 export default function LoginScreen({ navigation }) {
-  // --- ESTADOS DO COMPONENTE ---
-  // isLogin: Controla se estamos no ecrã de Login (true) ou de Registo (false)
+  // --- GESTÃO DE ESTADO (STATE) ---
+  // isLogin: Define se o utilizador está a ver o formulário de Login (true) ou Registo (false)
   const [isLogin, setIsLogin] = useState(true);
   
-  // Variáveis para guardar o que o utilizador escreve nos campos de texto
+  // Variáveis para armazenar o que o utilizador escreve nos inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nif, setNif] = useState('');
   
-  // userRole: Define que tipo de conta está a ser criada (vitima por defeito)
+  // Define o tipo de conta a criar por defeito (Vítima)
   const [userRole, setUserRole] = useState('vitima'); 
 
   // --- FUNÇÕES ---
-  // Função que é chamada ao clicar no botão "Entrar" ou "Criar Conta"
+  // Função que gere o clique no botão principal (Entrar ou Criar Conta)
   const handleAuthentication = () => {
     if (isLogin) {
-      // SIMULAÇÃO: Num cenário real, aqui irias chamar a tua API ou Firebase para validar o login
-      Alert.alert("Simulação de Login", "A verificar na Base de Dados... A redirecionar!");
-      // Após o login, redireciona para o dashboard da vítima (podes depois adaptar para verificar o tipo de user)
+      // Simulação de login - Mostra um alerta usando as nossas Strings centralizadas
+      Alert.alert(Strings.login.simLoginTitle, Strings.login.simLoginMessage);
+      // Redireciona para o dashboard principal
       navigation.navigate('VictimDashboard'); 
     } else {
-      // SIMULAÇÃO: Registo de uma nova conta
-      Alert.alert("Simulação de Registo", `Conta de ${userRole} criada com sucesso!`);
+      // Simulação de registo - Mostra alerta de sucesso com o tipo de conta
+      Alert.alert(Strings.login.simRegistoTitle, Strings.login.simRegistoMessage(userRole));
       
-      // Redirecionamento condicional baseado no tipo de conta escolhida no registo
+      // Redirecionamento condicional: Vitimas vão para um lado, Socorristas para outro
       if (userRole === 'vitima') {
         navigation.navigate('VictimDashboard');
       } else {
@@ -41,93 +42,107 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  // --- INTERFACE DE UTILIZADOR (UI) ---
+  // --- INTERFACE (UI) ---
   return (
+    // SafeAreaView garante que a app não fica escondida pelo "notch" do telemóvel
     <SafeAreaView style={styles.container}>
-      {/* Logótipo da Aplicação (Atualmente um espaço reservado) */}
+      
+      {/* Logótipo provisório da App */}
       <View style={styles.placeholderLogo}>
-        <Text style={{color: 'white', fontWeight: 'bold'}}>S.A.F.E. LOGO</Text>
+        <Text style={{color: 'white', fontWeight: 'bold'}}>{Strings.appName}</Text>
       </View>
       
-      {/* Botões superiores para alternar entre "Login" e "Registo" */}
+      {/* Abas superiores para alternar entre Login e Registo */}
       <View style={styles.tabContainer}>
-        {/* TouchableOpacity é usado em vez de Button porque permite maior personalização de estilo */}
         <TouchableOpacity onPress={() => setIsLogin(true)} style={[styles.tab, isLogin && styles.activeTab]}>
-          <Text style={{fontWeight: isLogin ? 'bold' : 'normal'}}>Login</Text>
+          <Text style={{fontWeight: isLogin ? 'bold' : 'normal'}}>{Strings.login.tabLogin}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setIsLogin(false)} style={[styles.tab, !isLogin && styles.activeTab]}>
-          <Text style={{fontWeight: !isLogin ? 'bold' : 'normal'}}>Registo</Text>
+          <Text style={{fontWeight: !isLogin ? 'bold' : 'normal'}}>{Strings.login.tabRegister}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Cartão principal que contém o formulário */}
+      {/* Cartão principal com o formulário */}
       <View style={styles.card}>
-        <Text style={styles.label}>Email:</Text>
+        
+        {/* Campo de Email (Sempre visível) */}
+        <Text style={styles.label}>{Strings.login.emailLabel}</Text>
         <TextInput 
           style={styles.input} 
-          placeholder="Email..." 
+          placeholder={Strings.login.emailPlaceholder} 
           value={email} 
           onChangeText={setEmail} 
-          autoCapitalize="none" // Evita que a primeira letra fique maiúscula automaticamente (útil para emails)
+          autoCapitalize="none" // Evita que emails comecem com letra maiúscula
         />
         
-        {/* Se NÃO estivermos no login (ou seja, estamos no Registo), mostramos os campos extra */}
+        {/* Campos visíveis APENAS no formulário de Registo */}
         {!isLogin && (
           <>
-            <Text style={styles.label}>NIF:</Text>
+            <Text style={styles.label}>{Strings.login.nifLabel}</Text>
             <TextInput 
               style={styles.input} 
-              placeholder="NIF..." 
-              keyboardType="numeric" // Abre o teclado numérico
+              placeholder={Strings.login.nifPlaceholder} 
+              keyboardType="numeric" // Abre o teclado de números
               value={nif} 
               onChangeText={setNif} 
             />
             
-            <Text style={styles.label}>Tipo de Conta:</Text>
-            {/* Escolha do tipo de utilizador (Vítima ou Socorrista) */}
+            {/* Seleção do Tipo de Conta (Vítima ou Socorrista) */}
+            <Text style={styles.label}>{Strings.login.accountTypeLabel}</Text>
             <View style={styles.roleContainer}>
               <TouchableOpacity 
                 style={[styles.roleButton, userRole === 'vitima' && styles.activeRoleVitima]} 
                 onPress={() => setUserRole('vitima')}
               >
-                <Text style={[styles.roleText, userRole === 'vitima' && styles.activeRoleText]}>Vítima</Text>
+                <Text style={[styles.roleText, userRole === 'vitima' && styles.activeRoleText]}>
+                  {Strings.login.roleVictim}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.roleButton, userRole === 'socorrista' && styles.activeRoleSocorrista]} 
                 onPress={() => setUserRole('socorrista')}
               >
-                <Text style={[styles.roleText, userRole === 'socorrista' && styles.activeRoleText]}>Socorrista</Text>
+                <Text style={[styles.roleText, userRole === 'socorrista' && styles.activeRoleText]}>
+                  {Strings.login.roleRescuer}
+                </Text>
               </TouchableOpacity>
             </View>
           </>
         )}
         
-        <Text style={styles.label}>Password:</Text>
+        {/* Campo de Password (Sempre visível) */}
+        <Text style={styles.label}>{Strings.login.passwordLabel}</Text>
         <TextInput 
           style={styles.input} 
-          placeholder="Password..." 
-          secureTextEntry // Oculta o texto digitado (ex: ******)
+          placeholder={Strings.login.passwordPlaceholder} 
+          secureTextEntry // Esconde os caracteres (***)
           value={password} 
           onChangeText={setPassword} 
         />
 
-        {/* Campo de repetição de password apenas visível no Registo */}
+        {/* Repetir Password (Apenas no Registo) */}
         {!isLogin && (
           <>
-            <Text style={styles.label}>Repetir Password:</Text>
-            <TextInput style={styles.input} placeholder="Repetir Password..." secureTextEntry />
+            <Text style={styles.label}>{Strings.login.repeatPasswordLabel}</Text>
+            <TextInput 
+              style={styles.input} 
+              placeholder={Strings.login.repeatPasswordPlaceholder} 
+              secureTextEntry 
+            />
           </>
         )}
 
-        {/* Botão de submissão do formulário */}
+        {/* Botão de Submissão */}
         <TouchableOpacity style={styles.mainButton} onPress={handleAuthentication}>
-          <Text style={styles.mainButtonText}>{isLogin ? 'Entrar' : 'Criar Conta'}</Text>
+          <Text style={styles.mainButtonText}>
+            {isLogin ? Strings.login.btnEnter : Strings.login.btnCreateAccount}
+          </Text>
         </TouchableOpacity>
 
-        {/* Link de recuperação de password apenas visível no Login */}
+        {/* Link para recuperar password (Apenas no Login) */}
         {isLogin && (
           <TouchableOpacity>
-            <Text style={styles.forgotPassword}>Esqueceu-se da password?</Text>
+            <Text style={styles.forgotPassword}>{Strings.login.forgotPassword}</Text>
           </TouchableOpacity>
         )}
       </View>

@@ -1,34 +1,36 @@
 import * as Location from 'expo-location';
+// Funções do Firebase Firestore para enviar dados para a base de dados
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-// ActivityIndicator: Componente visual que mostra um "spinner" de carregamento
+// ActivityIndicator usado para mostrar a "rodinha" de loading
 import { ActivityIndicator, Alert, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-maps';
 
-// Importações do Firebase para interagir com a base de dados (Firestore)
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../firebaseConfig'; // Ligações configuradas no teu ficheiro Firebase
+// Importa as configurações de autenticação e base de dados do Firebase
+import { auth, db } from '../firebaseConfig';
 
+// Importação dos Textos (Strings) e Estilos
+import { Strings } from '../constants/Strings';
 import { styles } from './styles/VictimDashboardStyles';
 
 export default function VictimDashboard({ navigation }) {
-  // Estados para gerir a localização do utilizador
+  // Estado para armazenar as coordenadas exatas da vítima
   const [location, setLocation] = useState(null);
   
-  // Estado para controlar se o botão SOS está num processo de envio (para evitar múltiplos cliques)
+  // Estado de controlo: Evita que o utilizador carregue 50 vezes no botão de SOS sem querer
   const [isSending, setIsSending] = useState(false);
 
-  // Pedir permissões e capturar a localização assim que o ecrã abre
+  // Assim que o ecrã carrega, pede permissão e apanha as coordenadas
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
+      
+      // Sem localização, os socorristas não conseguem ajudar
       if (status !== 'granted') {
-        Alert.alert(
-          'Permissão Negada', 
-          'Precisamos da sua localização para que os socorristas o encontrem.'
-        );
+        Alert.alert(Strings.permissionDeniedTitle, Strings.victim.locationError);
         return;
       }
-
+      
       let currentLocation = await Location.getCurrentPositionAsync({});
       setLocation({
         latitude: currentLocation.coords.latitude,
@@ -39,122 +41,109 @@ export default function VictimDashboard({ navigation }) {
     })();
   }, []);
 
-  // --- FUNÇÃO PARA ENVIAR PEDIDO DE SOCORRO (FIREBASE) ---
+  // --- FUNÇÃO DE ENVIO DE SOS (FIREBASE) ---
   const handleSOS = async () => {
-    // Se ainda não temos localização, não podemos enviar o pedido corretamente
+    // Validação de segurança: Não enviar se o GPS ainda não tiver respondido
     if (!location) {
-      Alert.alert("Aguarde", "A obter a sua localização exata para o resgate...");
+      Alert.alert(Strings.wait, Strings.victim.locationWait);
       return;
     }
-
-    // Bloqueia o botão e mostra o ícone de carregamento
+    
+    // Ativa o estado de carregamento para atualizar o botão visualmente
     setIsSending(true);
 
     try {
-      // Tenta adicionar um novo documento à coleção "sos_requests" no Firestore
+      // addDoc: Cria um novo documento na coleção 'sos_requests' na base de dados
       await addDoc(collection(db, 'sos_requests'), {
-        userId: auth.currentUser ? auth.currentUser.uid : 'anonimo', // Guarda o ID se logado
+        userId: auth.currentUser ? auth.currentUser.uid : 'anonimo', // Regista quem pediu
         userEmail: auth.currentUser ? auth.currentUser.email : 'N/A',
-        latitude: location.latitude,     // Coordenadas atuais
+        latitude: location.latitude, // Envia as coordenadas para o mapa dos socorristas
         longitude: location.longitude,
         type: 'SOS_URGENTE', 
-        status: 'pendente',              // Para os socorristas saberem que ninguém atendeu ainda
-        timestamp: serverTimestamp()     // Carimbo de tempo do servidor do Firebase (muito seguro)
+        status: 'pendente', // Mantém pendente até um socorrista aceitar o pedido
+        timestamp: serverTimestamp() // Hora oficial do servidor Firebase
       });
 
-      // Sucesso! Mostra um alerta à vítima
-      Alert.alert(
-        "🚨 Alerta Enviado!", 
-        "O seu pedido foi enviado com sucesso. Socorristas num raio de 50km estão a ser notificados."
-      );
+      // Feedback de sucesso
+      Alert.alert(Strings.victim.sosSentTitle, Strings.victim.sosSentMessage);
     } catch (error) {
-      // Se a internet falhar ou houver erro no Firebase
-      Alert.alert("Erro", "Não foi possível enviar o alerta. Verifique a sua ligação.");
+      // Feedback de erro (ex: falha de internet)
+      Alert.alert(Strings.error, Strings.victim.sosError);
       console.error("Erro ao enviar SOS:", error);
     } finally {
-      // Independentemente de dar erro ou sucesso, desbloqueia o botão
+      // Independentemente de dar erro ou sucesso, desliga o estado de carregamento
       setIsSending(false);
     }
   };
 
-  // Função pendente para um futuro botão de apoio de mantimentos
+  // Função provisória para o botão de Apoio
   const handleApoio = () => {
-    Alert.alert("Apoio Humanitário", "Funcionalidade de pedido de mantimentos em breve.");
+    Alert.alert(Strings.victim.supportAlertTitle, Strings.victim.supportAlertMessage);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      
-      {/* MAPA: Envolvemos o mapa numa View para controlar melhor a altura */}
+       
+      {/* ÁREA DO MAPA */}
       <View style={styles.mapContainer}>
         <MapView 
           style={styles.map} 
           showsUserLocation={true} 
           showsMyLocationButton={true} 
-          // Se "location" ainda for null, o mapa foca temporariamente no Porto por defeito
-          region={location || {
-            latitude: 41.1579, 
-            longitude: -8.6291,
-            latitudeDelta: 0.0922,
-            longitudeDelta: 0.0421,
-          }}
+          // Se a localização ainda não estiver pronta, foca temporariamente numa zona padrão
+          region={location || { latitude: 41.1579, longitude: -8.6291, latitudeDelta: 0.0922, longitudeDelta: 0.0421 }} 
         />
       </View>
 
+      {/* ÁREA DE AÇÕES E INFORMAÇÕES */}
       <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false}>
         
-        {/* Fila com os botões de ação principal */}
+        {/* Fila com os botões principais de emergência */}
         <View style={styles.buttonRow}>
-          {/* Botão de SOS (Desativado se `isSending` for true) */}
+          
+          {/* Botão de SOS (Desativa-se durante o envio de dados) */}
           <TouchableOpacity 
             style={[styles.actionButton, styles.btnSOS]} 
-            onPress={handleSOS}
+            onPress={handleSOS} 
             disabled={isSending}
           >
-            {/* Se estiver a enviar mostra a rodinha (ActivityIndicator), senão mostra o texto */}
+            {/* Se estiver a enviar, mostra o ActivityIndicator, senão mostra o texto normal */}
             {isSending ? (
               <ActivityIndicator color="#FFF" size="large" />
             ) : (
               <>
-                <Text style={styles.btnText}>SOS</Text>
-                <Text style={styles.btnSubText}>Pedido Urgente</Text>
+                <Text style={styles.btnText}>{Strings.victim.btnSOS}</Text>
+                <Text style={styles.btnSubText}>{Strings.victim.btnSOSSub}</Text>
               </>
             )}
           </TouchableOpacity>
 
-          {/* Botão de Pedido de Apoio */}
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.btnApoio]}
-            onPress={handleApoio}
-          >
-            <Text style={styles.btnText}>APOIO</Text>
-            <Text style={styles.btnSubText}>Mantimentos</Text>
+          {/* Botão de Apoio Logístico */}
+          <TouchableOpacity style={[styles.actionButton, styles.btnApoio]} onPress={handleApoio}>
+            <Text style={styles.btnText}>{Strings.victim.btnSupport}</Text>
+            <Text style={styles.btnSubText}>{Strings.victim.btnSupportSub}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Cartão de informações sobre o estado de emergência global da zona */}
+        {/* Cartão de Estado Geral (Notificações da proteção civil) */}
         <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>Estado de Emergência: PORTO</Text>
-          <Text style={styles.alertText}>🔥 ALERTA CRÍTICO 🔥</Text>
-          <Text style={styles.infoText}>Incêndio ativo a 12km de distância.</Text>
-          <Text style={styles.infoText}>Siga as instruções das autoridades.</Text>
+          <Text style={styles.statusTitle}>{Strings.victim.emergencyStateTitle}</Text>
+          <Text style={styles.alertText}>{Strings.victim.criticalAlert}</Text>
+          <Text style={styles.infoText}>{Strings.victim.fireInfo}</Text>
+          <Text style={styles.infoText}>{Strings.victim.followInstructions}</Text>
         </View>
 
-        {/* Cartão com atualizações e dicas */}
+        {/* Cartão de Atualizações em Tempo Real */}
         <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>Últimas Atualizações:</Text>
-          <Text style={styles.infoText}>• Meios de socorro a caminho do setor Norte.</Text>
-          <Text style={styles.infoText}>• Condições meteorológicas adversas previstas.</Text>
+          <Text style={styles.statusTitle}>{Strings.victim.updatesTitle}</Text>
+          <Text style={styles.infoText}>{Strings.victim.update1}</Text>
+          <Text style={styles.infoText}>{Strings.victim.update2}</Text>
         </View>
 
-        {/* Botão de Logout */}
-        <TouchableOpacity 
-          style={styles.logoutButton} 
-          onPress={() => navigation.navigate('Login')}
-        >
-          <Text style={styles.logoutButtonText}>Sair / Voltar ao Login</Text>
+        {/* Botão de Logout / Voltar Atrás */}
+        <TouchableOpacity style={styles.logoutButton} onPress={() => navigation.navigate('Login')}>
+          <Text style={styles.logoutButtonText}>{Strings.logout}</Text>
         </TouchableOpacity>
-        
       </ScrollView>
     </SafeAreaView>
   );

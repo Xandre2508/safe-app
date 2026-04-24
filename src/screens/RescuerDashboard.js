@@ -1,30 +1,34 @@
-// Importa o pacote de localização do Expo para aceder ao GPS do dispositivo
+// Importa biblioteca para obter a localização GPS do dispositivo
 import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
 import { Alert, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-// Importa o MapView para renderizar mapas nativos (Google Maps no Android, Apple Maps no iOS)
+// MapView para desenhar os mapas na UI
 import MapView from 'react-native-maps';
+
+// Importação de textos (Clean Code) e Estilos
+import { Strings } from '../constants/Strings';
 import { styles } from './styles/RescuerDashboardStyles';
 
 export default function RescuerDashboard({ navigation }) {
-  // Estado para armazenar as coordenadas atuais do socorrista
+  // Estado para armazenar as coordenadas de GPS do socorrista
   const [location, setLocation] = useState(null);
 
-  // useEffect: Corre automaticamente uma vez quando o ecrã é carregado
+  // useEffect: Executa este código automaticamente quando o ecrã é aberto
   useEffect(() => {
-    // Função assíncrona para pedir permissões e obter a localização
     (async () => {
       // Pede permissão ao utilizador para aceder ao GPS
       let { status } = await Location.requestForegroundPermissionsAsync();
+      
+      // Se a permissão for negada, mostra um erro e para a execução
       if (status !== 'granted') {
-        Alert.alert('Permissão Negada', 'Precisamos da sua localização para o mapa.');
-        return; // Pára a execução se não houver permissão
+        Alert.alert(Strings.permissionDeniedTitle, Strings.rescuer.locationError);
+        return; 
       }
 
-      // Se tiver permissão, obtém as coordenadas exatas
+      // Obtém a localização atual com alta precisão
       let currentLocation = await Location.getCurrentPositionAsync({});
       
-      // Guarda a localização no estado com um zoom (latitudeDelta e longitudeDelta) pré-definido
+      // Guarda a localização no estado com um zoom predefinido (latitudeDelta/longitudeDelta)
       setLocation({
         latitude: currentLocation.coords.latitude,
         longitude: currentLocation.coords.longitude,
@@ -32,59 +36,62 @@ export default function RescuerDashboard({ navigation }) {
         longitudeDelta: 0.05,
       });
     })();
-  }, []); // O array vazio [] garante que isto só corre 1 vez ao iniciar
+  }, []); // Array vazio garante que isto só corre 1 vez
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* MAPA: Fica na parte superior do ecrã */}
+      
+      {/* ÁREA DO MAPA */}
       <MapView 
         style={styles.map} 
-        showsUserLocation={true} // Mostra o ponto azul representando o utilizador
-        showsMyLocationButton={true} // Mostra o botão para centrar no utilizador
-        region={location} // A região inicial baseada no estado que capturámos no useEffect
+        showsUserLocation={true} // Mostra o ponto azul representando o socorrista
+        showsMyLocationButton={true} // Botão para recentrar o mapa
+        region={location} // A região que o mapa deve focar
       />
 
-      {/* ÁREA DE CONTEÚDO: Estatísticas e lista de tarefas do socorrista */}
+      {/* ÁREA DE INFORMAÇÕES E LISTAGENS */}
       <View style={styles.contentSection}>
         
-        {/* Cartões superiores informativos (Estatísticas rápidas) */}
+        {/* Painel superior com botões de estatísticas rápidas */}
         <View style={styles.headerButtons}>
+          {/* Botão de Alertas Ativos */}
           <View style={styles.greenButton}>
             <Text style={styles.whiteIconText}>⚠️</Text>
-            <Text style={styles.whiteText}>Alerta de Ativos</Text>
-            <Text style={styles.countText}>12 Pendentes</Text>
+            <Text style={styles.whiteText}>{Strings.rescuer.activeAlertsTitle}</Text>
+            <Text style={styles.countText}>{Strings.rescuer.activeAlertsCount}</Text>
           </View>
+          {/* Botão de Missão Atual */}
           <View style={styles.grayButton}>
             <Text style={styles.whiteIconText}>📋</Text>
-            <Text style={styles.whiteText}>Missão Atual:</Text>
-            <Text style={styles.countText}>Setor Leste</Text>
+            <Text style={styles.whiteText}>{Strings.rescuer.currentMissionTitle}</Text>
+            <Text style={styles.countText}>{Strings.rescuer.currentMissionLocation}</Text>
           </View>
         </View>
 
-        {/* ScrollView permite fazer scroll na lista caso haja muitas ocorrências */}
+        {/* Lista de tarefas/ocorrências (ScrollView permite rolar se a lista for grande) */}
         <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
           
-          {/* Cartão de uma ocorrência específica */}
+          {/* Cartão de Resgate Pendente */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Resgate Prioritário:</Text>
-            <Text style={styles.listItem}>📍 Rua de Santa Catarina, Porto</Text>
-            <Text style={styles.listItem}>👤 Maria Santos (82 anos)</Text>
-            <Text style={styles.priorityText}>🔴 Prioridade Máxima - Idade e Fumo</Text>
+            <Text style={styles.sectionTitle}>{Strings.rescuer.priorityRescueTitle}</Text>
+            <Text style={styles.listItem}>{Strings.rescuer.priorityRescueLocation}</Text>
+            <Text style={styles.listItem}>{Strings.rescuer.priorityRescuePerson}</Text>
+            <Text style={styles.priorityText}>{Strings.rescuer.priorityRescueReason}</Text>
           </View>
 
-          {/* Cartão de informações táticas */}
+          {/* Cartão de Atualizações / Informações de campo */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Atualização Tática:</Text>
-            <Text style={styles.listItem}>Bombeiros a 5 minutos do local.</Text>
-            <Text style={styles.listItem}>Vento forte de Noroeste.</Text>
+            <Text style={styles.sectionTitle}>{Strings.rescuer.tacticalUpdateTitle}</Text>
+            <Text style={styles.listItem}>{Strings.rescuer.tacticalUpdate1}</Text>
+            <Text style={styles.listItem}>{Strings.rescuer.tacticalUpdate2}</Text>
           </View>
 
-          {/* Botão para terminar sessão (volta ao ecrã de Login) */}
+          {/* Botão para terminar sessão */}
           <TouchableOpacity 
             style={styles.logoutButton} 
             onPress={() => navigation.navigate('Login')}
           >
-            <Text style={styles.logoutButtonText}>Sair / Voltar ao Login</Text>
+            <Text style={styles.logoutButtonText}>{Strings.logout}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
