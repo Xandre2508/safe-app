@@ -48,3 +48,26 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+# 📱 Meu App Expo
+
+Uma breve descrição sobre o que o seu aplicativo faz. (Ex: Este é um projeto focado em resolver o problema X, criado com React Native e Expo).
+
+---
+
+## 🚀 Pré-requisitos
+
+Antes de começar, você precisará garantir que tem as seguintes ferramentas:
+
+* **Node.js** instalado no seu computador.
+* **Dispositivo para testes:** O aplicativo **Expo Go** instalado no seu celular (disponível para Android e iOS) ou um emulador/simulador configurado no PC.
+
+---
+
+## 🛠️ Instalação e Execução
+
+Para rodar este projeto na sua máquina local, siga os passos abaixo:
+
+1. **Instale as dependências do projeto:**
+   ```bash
+   npm install
