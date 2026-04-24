@@ -71,3 +71,37 @@ Para rodar este projeto na sua máquina local, siga os passos abaixo:
 1. **Instale as dependências do projeto:**
    ```bash
    npm install
+
+   📲 Como testar o App?
+Após iniciar o servidor, você verá um QR Code e algumas opções no terminal. Escolha a melhor forma de visualizar o app:
+
+No celular físico (Expo Go): Escaneie o QR Code com a câmera do seu iPhone ou com o aplicativo Expo Go no Android.
+
+No Emulador Android: Pressione a tecla a no terminal.
+
+No Simulador iOS: Pressione a tecla i no terminal.
+
+No Navegador: Pressione a tecla w no terminal.
+
+🏗️ Como o App funciona
+Roteamento Baseado em Arquivos: Este projeto utiliza o expo-router. Isso significa que você pode começar a desenvolver editando os arquivos diretamente dentro da pasta app. Cada arquivo lá dentro representa uma rota/tela do seu aplicativo.
+
+Começando do zero: Se você quiser limpar o código de exemplo inicial do Expo e começar com um projeto em branco, basta rodar o comando:
+
+Bash
+npm run reset-project
+Nota: Isso moverá o código inicial para a pasta app-example e criará uma pasta app vazia para você programar.
+
+📚 Recursos e Comunidade
+Se precisar de ajuda com o ecossistema Expo, consulte os links abaixo:
+
+Documentação Oficial do Expo
+
+Tutorial Passo a Passo
+
+Comunidade no Discord
+
+✒️ Autor
+Alexandre - @Xandre2508
+
+E-mail: almeidaalexandre1233@gmail.com
