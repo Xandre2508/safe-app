@@ -11,7 +11,7 @@ import { auth, db } from '../firebaseConfig';
 
 // Importação dos Textos (Strings) e Estilos
 import { Strings } from '../constants/Strings';
-import { styles } from './styles/VictimDashboardStyles';
+import { styles } from '../styles/VictimDashboardStyles';
 
 export default function VictimDashboard({ navigation }) {
   // Estado para armazenar as coordenadas exatas da vítima

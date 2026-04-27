@@ -7,7 +7,7 @@ import MapView from 'react-native-maps';
 
 // Importação de textos (Clean Code) e Estilos
 import { Strings } from '../constants/Strings';
-import { styles } from './styles/RescuerDashboardStyles';
+import { styles } from '../styles/RescuerDashboardStyles';
 
 export default function RescuerDashboard({ navigation }) {
   // Estado para armazenar as coordenadas de GPS do socorrista
