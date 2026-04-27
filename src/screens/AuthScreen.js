@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Image,
@@ -11,10 +12,18 @@ import {
 } from 'react-native';
 import styles from '../styles/AuthScreenStyles';
 
+// --- IMPORTAÇÕES DO FIREBASE ---
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../firebaseConfig';
 
 export default function AuthScreen({ navigation }) {
   // --- 1. ESTADOS (STATE) ---
   const [isLogin, setIsLogin] = useState(true);
+  const [loading, setLoading] = useState(false); // Estado para controlar o loading do botão
   
   // Dados do formulário
   const [nome, setNome] = useState('');
@@ -67,30 +76,85 @@ export default function AuthScreen({ navigation }) {
     });
   };
 
-  // --- 5. LÓGICA DE NAVEGAÇÃO / SUBMISSÃO ---
-  const handleAuthentication = () => {
+  // --- 5. LÓGICA DE AUTENTICAÇÃO REAL (FIREBASE) ---
+  const handleAuthentication = async () => {
+    // Validação básica de campos vazios
     if (isLogin) {
-      // LOGIN
       if (!email || !password) {
         Alert.alert('Erro', 'Por favor, preencha o email e a password.');
         return;
       }
-      Alert.alert('Sucesso', 'Login efetuado com sucesso!');
-      navigation.navigate('VictimDashboard'); 
     } else {
-      // REGISTO
       if (!nome || !email || !nif || !password) {
         Alert.alert('Erro', 'Por favor, preencha todos os campos.');
         return;
       }
-      Alert.alert('Conta Criada', `Conta de ${userRole} criada com sucesso!`);
-      
-      // Redireciona consoante o tipo de conta
-      if (userRole === 'vitima') {
-        navigation.navigate('VictimDashboard');
+    }
+
+    setLoading(true); // Ativa o indicador de carregamento
+
+    try {
+      if (isLogin) {
+        // --- PROCESSO DE LOGIN ---
+        // 1. Autentica no Firebase Auth
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // 2. Procura o perfil do utilizador no Firestore para saber o cargo (role)
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          
+          // 3. Redireciona consoante o cargo guardado na BD
+          if (userData.role === 'vitima') {
+            navigation.navigate('VictimDashboard');
+          } else {
+            navigation.navigate('RescuerDashboard');
+          }
+        } else {
+          Alert.alert('Erro', 'Não foi encontrado um perfil para este utilizador.');
+        }
+
       } else {
-        navigation.navigate('RescuerDashboard');
+        // --- PROCESSO DE REGISTO ---
+        // 1. Cria o utilizador no Firebase Auth (Email/Pass)
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // 2. Cria o documento do utilizador no Firestore com os dados extra
+        // Usamos o UID do Auth como ID do documento para ligação direta
+        await setDoc(doc(db, 'users', user.uid), {
+          nome: nome,
+          email: email,
+          nif: nif,
+          role: userRole, // 'vitima' ou 'socorrista'
+          createdAt: new Date().toISOString()
+        });
+
+        Alert.alert('Sucesso', `Conta de ${userRole} criada com sucesso!`);
+        
+        // 3. Redireciona logo após o registo
+        if (userRole === 'vitima') {
+          navigation.navigate('VictimDashboard');
+        } else {
+          navigation.navigate('RescuerDashboard');
+        }
       }
+    } catch (error) {
+      // Tratamento de erros amigável
+      console.error(error);
+      let errorMessage = 'Ocorreu um erro inesperado.';
+      
+      if (error.code === 'auth/email-already-in-use') errorMessage = 'Este email já está registado.';
+      if (error.code === 'auth/weak-password') errorMessage = 'A password deve ter pelo menos 6 caracteres.';
+      if (error.code === 'auth/invalid-credential') errorMessage = 'Credenciais incorretas.';
+      if (error.code === 'auth/user-not-found') errorMessage = 'Utilizador não encontrado.';
+
+      Alert.alert('Erro', errorMessage);
+    } finally {
+      setLoading(false); // Desliga o loading independentemente do resultado
     }
   };
 
@@ -190,12 +254,20 @@ export default function AuthScreen({ navigation }) {
             onChangeText={setPassword}
           />
 
-          {/* BOTÃO DE SUBMISSÃO */}
-          <TouchableOpacity style={styles.button} onPress={handleAuthentication}>
-            <Text style={styles.buttonText}>{isLogin ? 'Entrar' : 'Criar Conta'}</Text>
+          {/* BOTÃO DE SUBMISSÃO COM LOADING */}
+          <TouchableOpacity 
+            style={styles.button} 
+            onPress={handleAuthentication}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.buttonText}>{isLogin ? 'Entrar' : 'Criar Conta'}</Text>
+            )}
           </TouchableOpacity>
 
-          {/* LINK DE RECUPERAÇÃO DE PASSWORD (SÓ NO LOGIN) */}
+          {/* LINKS ADICIONAIS */}
           {isLogin ? (
             <TouchableOpacity>
               <Text style={styles.linkText}>Esqueceu-se da password?</Text>
