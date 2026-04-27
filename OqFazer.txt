@@ -14,3 +14,5 @@ Fazer esqueceu a sua password
 
 Adicionar perfil para vitima e socorrista 
 
+Trocar de Socorrista para Organizaçao no Registo
+
