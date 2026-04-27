@@ -1,0 +1,16 @@
+
+Interface para um Operador 
+
+registo 
+    Removber socorrista ou Vitima 
+    A conta ée craida automaticamente como vitima 
+
+Criar um painel de admiñ
+    -  Serve para criar acc para socorristas e Operadores
+    -  Ligados a uma ORG  
+    - Add o nome da Org ao perfil
+    
+Fazer esqueceu a sua password 
+
+Adicionar perfil para vitima e socorrista 
+

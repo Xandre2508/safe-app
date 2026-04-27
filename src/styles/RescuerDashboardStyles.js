@@ -13,8 +13,8 @@ export const styles = StyleSheet.create({
   listContainer: { flex: 1 },
   card: { backgroundColor: '#FFF', padding: 15, borderRadius: 15, marginBottom: 15 },
   sectionTitle: { fontWeight: 'bold', fontSize: 16, marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#EEE', paddingBottom: 5 },
-  listItem: { fontSize: 14, color: '#333', marginBottom: 5 },
+  listItem: { fontSize: 14, color: '#000000', marginBottom: 5 },
   priorityText: { fontSize: 14, color: '#E32636', fontWeight: 'bold', marginTop: 5 },
-  logoutButton: { backgroundColor: '#333', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10, marginBottom: 20 },
+  logoutButton: { backgroundColor: '#000000', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10, marginBottom: 20 },
   logoutButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 }
 });
