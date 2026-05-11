@@ -1,18 +1,21 @@
 
 Interface para um Operador 
 
-registo 
-    Removber socorrista ou Vitima 
-    A conta ée craida automaticamente como vitima 
+Aba de registo 
+    Remover socorrista ou Vitima da aba de criaçao de conta  
+    A conta é criada automaticamente como vitima 
+    Se for uma conta de organizaçao isso é gerenciado no painel de admin 
 
 Criar um painel de admiñ
+    - Uma Acc especifica vai ser acesso a um painel de admin
     -  Serve para criar acc para socorristas e Operadores
     -  Ligados a uma ORG  
-    - Add o nome da Org ao perfil
+    - Add o nome da Org ao perfil (Por ex Bombieros do Marco)
     
-Fazer esqueceu a sua password 
+Fazer Interface do esqueceu a sua password
+Linkar o esqueceu passowrd com o firebase da Google 
 
-Adicionar perfil para vitima e socorrista 
+Adicionar perfil para vitima e socorrista dento da interface apos login 
 
 Trocar de Socorrista para Organizaçao no Registo
 
