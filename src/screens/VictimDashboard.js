@@ -1,5 +1,4 @@
 import * as Location from 'expo-location';
-// NOVO: Adicionado 'doc' e 'getDoc' para ir buscar o nome do utilizador à BD
 import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, SafeAreaView, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -13,7 +12,6 @@ export default function VictimDashboard({ navigation }) {
   const [location, setLocation] = useState(null);
   const [isSending, setIsSending] = useState(false);
   
-  // NOVO: Estado para guardar o nome da pessoa e controlar a UI
   const [userName, setUserName] = useState('');
   const [showDetailsForm, setShowDetailsForm] = useState(false); 
 
@@ -22,7 +20,6 @@ export default function VictimDashboard({ navigation }) {
   const [temCriancas, setTemCriancas] = useState(false);
 
   useEffect(() => {
-    // 1. Obter Localização
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -39,7 +36,6 @@ export default function VictimDashboard({ navigation }) {
       });
     })();
 
-    // 2. NOVO: Ir à BD buscar o nome registado da pessoa
     const fetchUserName = async () => {
       if (auth.currentUser) {
         try {
@@ -67,7 +63,7 @@ export default function VictimDashboard({ navigation }) {
       await addDoc(collection(db, 'sos_requests'), {
         userId: auth.currentUser ? auth.currentUser.uid : 'anonimo',
         userEmail: auth.currentUser ? auth.currentUser.email : 'N/A',
-        userName: userName || 'Utilizador Desconhecido', // <--- Envia o NOME para o SOS
+        userName: userName || 'Utilizador Desconhecido', 
         latitude: location.latitude,
         longitude: location.longitude,
         status: 'pendente',
@@ -81,7 +77,6 @@ export default function VictimDashboard({ navigation }) {
 
       Alert.alert(Strings.victim.sosSentTitle, Strings.victim.sosSentMessage);
       
-      // Limpa e esconde o formulário após enviar
       setShowDetailsForm(false);
       setIdade('');
       setEstaGravida(false);
@@ -100,19 +95,39 @@ export default function VictimDashboard({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      
+      {/* BOTÃO DE PERFIL FLUTUANTE */}
+      <TouchableOpacity 
+        style={{
+          position: 'absolute',
+          top: 45, // Ajustado ligeiramente para baixo para SafeArea no iPhone
+          left: 15,
+          zIndex: 999,
+          backgroundColor: '#FFFFFF',
+          width: 50,
+          height: 50,
+          borderRadius: 25,
+          justifyContent: 'center',
+          alignItems: 'center',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+          elevation: 5,
+        }}
+        onPress={() => navigation.navigate('ProfileScreen')}
+      >
+        <Text style={{ fontSize: 24 }}>👤</Text>
+      </TouchableOpacity>
+
       <View style={styles.mapContainer}>
         <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />
       </View>
 
       <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false}>
-        
-        {/* LÓGICA DO FORMULÁRIO: Se for FALSE, mostra apenas os botões iniciais */}
         {!showDetailsForm ? (
           <View style={styles.buttonRow}>
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.btnSOS]} 
-              onPress={() => setShowDetailsForm(true)} // Abre a aba de detalhes
-            >
+            <TouchableOpacity style={[styles.actionButton, styles.btnSOS]} onPress={() => setShowDetailsForm(true)}>
               <Text style={styles.btnText}>{Strings.victim.btnSOS}</Text>
               <Text style={styles.btnSubText}>{Strings.victim.btnSOSSub}</Text>
             </TouchableOpacity>
@@ -123,7 +138,6 @@ export default function VictimDashboard({ navigation }) {
             </TouchableOpacity>
           </View>
         ) : (
-          /* Se for TRUE, mostra o formulário de detalhes e o botão final de confirmar */
           <View style={{ backgroundColor: '#f9f9f9', padding: 15, borderRadius: 10, marginBottom: 20 }}>
             <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>Detalhes para o Resgate (Opcional):</Text>
             
@@ -146,25 +160,17 @@ export default function VictimDashboard({ navigation }) {
             </View>
 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <TouchableOpacity 
-                style={{ backgroundColor: '#ccc', padding: 15, borderRadius: 10, flex: 0.4, alignItems: 'center' }} 
-                onPress={() => setShowDetailsForm(false)}
-              >
+              <TouchableOpacity style={{ backgroundColor: '#ccc', padding: 15, borderRadius: 10, flex: 0.4, alignItems: 'center' }} onPress={() => setShowDetailsForm(false)}>
                 <Text style={{ color: '#333', fontWeight: 'bold' }}>Cancelar</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={[styles.btnSOS, { padding: 15, borderRadius: 10, flex: 0.55, alignItems: 'center' }]} 
-                onPress={handleConfirmSOS} 
-                disabled={isSending}
-              >
+              <TouchableOpacity style={[styles.btnSOS, { padding: 15, borderRadius: 10, flex: 0.55, alignItems: 'center' }]} onPress={handleConfirmSOS} disabled={isSending}>
                 {isSending ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>CONFIRMAR SOS</Text>}
               </TouchableOpacity>
             </View>
           </View>
         )}
 
-        {/* Cartões de estado (iguais ao teu original) */}
         <View style={styles.statusCard}>
           <Text style={styles.statusTitle}>{Strings.victim.emergencyStateTitle}</Text>
           <Text style={styles.alertText}>{Strings.victim.criticalAlert}</Text>

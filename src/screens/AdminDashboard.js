@@ -39,11 +39,9 @@ export default function AdminDashboard({ navigation }) {
       Alert.alert('Erro', 'Preencha todos os campos do profissional.');
       return;
     }
-
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         nome: nomeProfissional,
         email: email,
@@ -51,7 +49,6 @@ export default function AdminDashboard({ navigation }) {
         organizacao: orgName,
         createdAt: new Date().toISOString()
       });
-
       Alert.alert('Sucesso', `${novoCargo === 'socorrista' ? 'Socorrista' : 'Operador'} adicionado com sucesso!`);
       setNomeProfissional('');
       setEmail('');
@@ -65,6 +62,31 @@ export default function AdminDashboard({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      
+      {/* BOTÃO DE PERFIL FLUTUANTE */}
+      <TouchableOpacity 
+        style={{
+          position: 'absolute',
+          top: 15,
+          left: 15,
+          zIndex: 999,
+          backgroundColor: '#FFFFFF',
+          width: 50,
+          height: 50,
+          borderRadius: 25,
+          justifyContent: 'center',
+          alignItems: 'center',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+          elevation: 5,
+        }}
+        onPress={() => navigation.navigate('ProfileScreen')}
+      >
+        <Text style={{ fontSize: 24 }}>👤</Text>
+      </TouchableOpacity>
+
       <KeyboardAvoidingView style={styles.keyboardAvoid} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           
@@ -80,7 +102,6 @@ export default function AdminDashboard({ navigation }) {
               <TouchableOpacity style={[styles.toggleButton, novoCargo === 'socorrista' ? styles.activeSocorrista : styles.inactiveToggle]} onPress={() => setNovoCargo('socorrista')}>
                 <Text style={[styles.toggleText, novoCargo === 'socorrista' && styles.activeToggleText]}>Socorrista</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={[styles.toggleButton, novoCargo === 'operador' ? styles.activeOperador : styles.inactiveToggle]} onPress={() => setNovoCargo('operador')}>
                 <Text style={[styles.toggleText, novoCargo === 'operador' && styles.activeToggleText]}>Operador</Text>
               </TouchableOpacity>
