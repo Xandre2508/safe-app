@@ -1,18 +1,29 @@
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, SafeAreaView, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { auth, db } from '../firebaseConfig';
+import { styles } from '../styles/AdminDashboardStyles';
 
 export default function AdminDashboard({ navigation }) {
   const [orgName, setOrgName] = useState('A carregar...');
   const [nomeProfissional, setNomeProfissional] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [novoCargo, setNovoCargo] = useState('socorrista'); // ou 'operador'
+  const [novoCargo, setNovoCargo] = useState('socorrista');
   const [loading, setLoading] = useState(false);
 
-  // Vai buscar o nome da organização logada
   useEffect(() => {
     const fetchOrgData = async () => {
       if (auth.currentUser) {
@@ -31,21 +42,17 @@ export default function AdminDashboard({ navigation }) {
 
     setLoading(true);
     try {
-      // 1. Cria a conta no Firebase Auth (Atenção: fará login automático nesta conta)
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
-      // 2. Guarda na BD associando o nome da organização (ORG)
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         nome: nomeProfissional,
         email: email,
         role: novoCargo,
-        organizacao: orgName, // LIGAÇÃO À ORG
+        organizacao: orgName,
         createdAt: new Date().toISOString()
       });
 
-      Alert.alert('Sucesso', `${novoCargo} criado com sucesso e associado à org: ${orgName}`);
-      
-      // Limpa formulário
+      Alert.alert('Sucesso', `${novoCargo === 'socorrista' ? 'Socorrista' : 'Operador'} adicionado com sucesso!`);
       setNomeProfissional('');
       setEmail('');
       setPassword('');
@@ -57,43 +64,43 @@ export default function AdminDashboard({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F7FA', padding: 20 }}>
-      <ScrollView>
-        <Text style={{ fontSize: 22, fontWeight: 'bold', marginBottom: 20, color: '#1A5276' }}>
-          Painel de Administração
-        </Text>
-        <Text style={{ fontSize: 16, marginBottom: 20 }}>Organização: <Text style={{fontWeight: 'bold'}}>{orgName}</Text></Text>
-
-        <View style={{ backgroundColor: '#FFF', padding: 20, borderRadius: 15, shadowOpacity: 0.1, elevation: 3 }}>
-          <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 15 }}>Adicionar Novo Operacional</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView style={styles.keyboardAvoid} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
-            <TouchableOpacity 
-              style={{ flex: 0.48, padding: 10, backgroundColor: novoCargo === 'socorrista' ? '#27AE60' : '#EEE', borderRadius: 8, alignItems: 'center' }} 
-              onPress={() => setNovoCargo('socorrista')}>
-              <Text style={{ color: novoCargo === 'socorrista' ? '#FFF' : '#333', fontWeight: 'bold' }}>Socorrista</Text>
-            </TouchableOpacity>
+          <View style={styles.headerContainer}>
+            <Text style={styles.mainTitle}>Painel de Administração</Text>
+            <Text style={styles.orgText}>Organização: <Text style={styles.orgNameHighlight}>{orgName}</Text></Text>
+          </View>
 
-            <TouchableOpacity 
-              style={{ flex: 0.48, padding: 10, backgroundColor: novoCargo === 'operador' ? '#E67E22' : '#EEE', borderRadius: 8, alignItems: 'center' }} 
-              onPress={() => setNovoCargo('operador')}>
-              <Text style={{ color: novoCargo === 'operador' ? '#FFF' : '#333', fontWeight: 'bold' }}>Operador</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Adicionar Novo Operacional</Text>
+            
+            <View style={styles.toggleContainer}>
+              <TouchableOpacity style={[styles.toggleButton, novoCargo === 'socorrista' ? styles.activeSocorrista : styles.inactiveToggle]} onPress={() => setNovoCargo('socorrista')}>
+                <Text style={[styles.toggleText, novoCargo === 'socorrista' && styles.activeToggleText]}>Socorrista</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.toggleButton, novoCargo === 'operador' ? styles.activeOperador : styles.inactiveToggle]} onPress={() => setNovoCargo('operador')}>
+                <Text style={[styles.toggleText, novoCargo === 'operador' && styles.activeToggleText]}>Operador</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput style={styles.input} placeholder="Nome do Profissional" placeholderTextColor="#95A5A6" value={nomeProfissional} onChangeText={setNomeProfissional} />
+            <TextInput style={styles.input} placeholder="Email do Profissional" placeholderTextColor="#95A5A6" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
+            <TextInput style={styles.input} placeholder="Password Temporária" placeholderTextColor="#95A5A6" secureTextEntry value={password} onChangeText={setPassword} />
+
+            <TouchableOpacity style={styles.submitButton} onPress={handleCreateStaff} disabled={loading}>
+              {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitButtonText}>Adicionar Operacional</Text>}
             </TouchableOpacity>
           </View>
 
-          <TextInput style={{ backgroundColor: '#FAFAFA', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#DDD', marginBottom: 10 }} placeholder="Nome do Profissional" value={nomeProfissional} onChangeText={setNomeProfissional} />
-          <TextInput style={{ backgroundColor: '#FAFAFA', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#DDD', marginBottom: 10 }} placeholder="Email do Profissional" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-          <TextInput style={{ backgroundColor: '#FAFAFA', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#DDD', marginBottom: 15 }} placeholder="Password Temporária" secureTextEntry value={password} onChangeText={setPassword} />
-
-          <TouchableOpacity style={{ backgroundColor: '#1A5276', padding: 15, borderRadius: 8, alignItems: 'center' }} onPress={handleCreateStaff} disabled={loading}>
-            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Adicionar Operacional</Text>}
+          <TouchableOpacity style={styles.logoutButton} onPress={() => navigation.navigate('Login')}>
+            <Text style={styles.logoutButtonText}>Sair</Text>
           </TouchableOpacity>
-        </View>
 
-        <TouchableOpacity style={{ backgroundColor: '#333', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 30 }} onPress={() => navigation.navigate('Login')}>
-          <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Sair</Text>
-        </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

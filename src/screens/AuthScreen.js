@@ -4,7 +4,10 @@ import {
   Alert,
   Animated,
   Image,
+  KeyboardAvoidingView, // Componente para evitar que o teclado tape os inputs
+  Platform, // Permite detetar se o sistema operativo é iOS ou Android
   SafeAreaView,
+  ScrollView, // Permite fazer scroll quando o teclado ocupa espaço no ecrã
   Text,
   TextInput,
   TouchableOpacity,
@@ -23,51 +26,56 @@ import { auth, db } from '../firebaseConfig';
 
 export default function AuthScreen({ navigation }) {
   // --- 1. ESTADOS (STATE) ---
-  const [isLogin, setIsLogin] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const [isLogin, setIsLogin] = useState(true); // Define se a vista atual é Login (true) ou Registo (false)
+  const [loading, setLoading] = useState(false); // Controla o indicador de carregamento (spinner) do botão principal
   
-  // Dados do formulário
+  // Dados do formulário atrelados aos inputs
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [nif, setNif] = useState('');
   const [password, setPassword] = useState('');
 
   // --- 2. ANIMAÇÕES (REFS) ---
+  // Uso do useRef para reter a mesma instância do valor animado entre re-renderizações do React
   const logoTranslateY = useRef(new Animated.Value(0)).current;
   const entryOpacity = useRef(new Animated.Value(0)).current;
   const switchFade = useRef(new Animated.Value(1)).current;
 
-  // --- 3. EFEITO DE ENTRADA ---
+  // --- 3. EFEITO DE ENTRADA INICIAL ---
   useEffect(() => {
+    // Executa uma sequência de animações ao carregar o ecrã
     Animated.sequence([
-      Animated.delay(500), // Espera meio segundo
+      Animated.delay(500), // Aguarda 500ms antes de começar
       Animated.timing(logoTranslateY, {
-        toValue: -220, // Sobe o logótipo
+        toValue: -220, // Move o logótipo para cima no eixo Y
         duration: 1200,
-        useNativeDriver: true,
+        useNativeDriver: true, // Melhora o desempenho usando o motor nativo
       }),
       Animated.timing(entryOpacity, {
-        toValue: 1, // Faz aparecer o formulário
+        toValue: 1, // Faz o cartão de formulário aparecer suavemente (Fade In)
         duration: 800,
         useNativeDriver: true,
       }),
     ]).start();
   }, []);
 
-  // --- 4. FUNÇÃO DE TROCA (LOGIN <-> REGISTO) ---
+  // --- 4. FUNÇÃO DE TROCA SUAVE (LOGIN <-> REGISTO) ---
   const toggleAuth = (type) => {
+    // Evita reiniciar a animação se o utilizador clicar na tab onde já se encontra
     if ((type === 'login' && isLogin) || (type === 'register' && !isLogin)) return;
 
+    // Faz o conteúdo esmaecer (Fade Out)
     Animated.timing(switchFade, {
       toValue: 0,
       duration: 200,
       useNativeDriver: true,
     }).start(() => {
       setIsLogin(type === 'login');
-      // Limpa os campos ao trocar de separador
+      // Limpa os estados dos campos ao alternar de aba para evitar resíduos visuais
       setNome('');
       setNif('');
       setPassword(''); 
+      // Faz o novo conteúdo reaparecer (Fade In)
       Animated.timing(switchFade, {
         toValue: 1,
         duration: 200,
@@ -83,6 +91,7 @@ export default function AuthScreen({ navigation }) {
       return;
     }
     try {
+      // Solicita à Firebase Auth o envio de um email de redefinição padrão
       await sendPasswordResetEmail(auth, email);
       Alert.alert('Sucesso', `Um link de redefinição foi enviado para: ${email}`);
     } catch (error) {
@@ -90,8 +99,9 @@ export default function AuthScreen({ navigation }) {
     }
   };
 
-  // --- 6. LÓGICA DE AUTENTICAÇÃO REAL (FIREBASE) ---
+  // --- 6. LÓGICA DE AUTENTICAÇÃO (FIREBASE) ---
   const handleAuthentication = async () => {
+    // Validações locais de preenchimento obrigatório
     if (isLogin) {
       if (!email || !password) {
         Alert.alert('Erro', 'Por favor, preencha o email e a password.');
@@ -104,21 +114,22 @@ export default function AuthScreen({ navigation }) {
       }
     }
 
-    setLoading(true);
+    setLoading(true); // Ativa o spinner e desativa o botão de clique duplo
 
     try {
       if (isLogin) {
-        // --- PROCESSO DE LOGIN ---
+        // --- FLUXO DE LOGIN ---
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
+        // Procura os detalhes do perfil na Firestore com base no UID único do utilizador
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data();
           
-          // Encaminhamento dinâmico conforme o cargo guardado na BD
+          // Encaminhamento dinâmico focado no cargo ('role') retornado da BD
           if (userData.role === 'vitima') {
             navigation.navigate('VictimDashboard');
           } else if (userData.role === 'socorrista') {
@@ -133,16 +144,16 @@ export default function AuthScreen({ navigation }) {
         }
 
       } else {
-        // --- PROCESSO DE REGISTO (AUTOMATICAMENTE VÍTIMA) ---
+        // --- FLUXO DE REGISTO (CONTA AUTOMATICAMENTE DEFINIDA COMO VÍTIMA) ---
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // Guarda os dados diretamente com o cargo 'vitima'
+        // Escreve o documento inicial do utilizador na Firestore
         await setDoc(doc(db, 'users', user.uid), {
           nome: nome,
           email: email,
           nif: nif,
-          role: 'vitima', 
+          role: 'vitima', // Fixado estaticamente para automatizar o registo civil
           createdAt: new Date().toISOString()
         });
 
@@ -153,120 +164,136 @@ export default function AuthScreen({ navigation }) {
       console.error(error);
       let errorMessage = 'Ocorreu um erro inesperado.';
       
+      // Mapeamento de códigos de erro amigáveis para o utilizador final
       if (error.code === 'auth/email-already-in-use') errorMessage = 'Este email já está registado.';
       if (error.code === 'auth/weak-password') errorMessage = 'A password deve ter pelo menos 6 caracteres.';
       if (error.code === 'auth/invalid-credential') errorMessage = 'Credenciais incorretas.';
 
       Alert.alert('Erro', errorMessage);
     } finally {
-      setLoading(false);
+      setLoading(false); // Desliga o indicador de carregamento
     }
   };
 
-  // --- 7. INTERFACE (UI) ---
+  // --- 7. INTERFACE GRÁFICA (UI) ---
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* LOGÓTIPO ANIMADO */}
-      <Animated.View style={[styles.logoContainer, { transform: [{ translateY: logoTranslateY }] }]}>
-        <Image
-          source={require('../assets/SAFE_LOGO.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </Animated.View>
+      {/* KeyboardAvoidingView ajusta a posição do ecrã consoante a presença do teclado */}
+      <KeyboardAvoidingView 
+        style={{ flex: 1, width: '100%' }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {/* ScrollView permite deslizar a interface caso o teclado ocupe demasiado espaço */}
+        <ScrollView 
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
+          keyboardShouldPersistTaps="handled" // Permite fechar o teclado ao tocar fora dele
+          showsVerticalScrollIndicator={false}
+        >
 
-      {/* CARTÃO DO FORMULÁRIO ANIMADO */}
-      <Animated.View style={[styles.formContainer, { opacity: entryOpacity }]}>
+          {/* LOGÓTIPO ANIMADO */}
+          <Animated.View style={[styles.logoContainer, { transform: [{ translateY: logoTranslateY }] }]}>
+            <Image
+              source={require('../assets/SAFE_LOGO.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </Animated.View>
 
-        {/* SEPARADORES (TAB LOGIN / REGISTO) */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tabButton, isLogin && styles.activeTab]}
-            onPress={() => toggleAuth('login')}
-          >
-            <Text style={[styles.tabText, isLogin && styles.activeTabText]}>Login</Text>
-          </TouchableOpacity>
+          {/* CARTÃO DO FORMULÁRIO ANIMADO */}
+          <Animated.View style={[styles.formContainer, { opacity: entryOpacity }]}>
 
-          <TouchableOpacity
-            style={[styles.tabButton, !isLogin && styles.activeTab]}
-            onPress={() => toggleAuth('register')}
-          >
-            <Text style={[styles.tabText, !isLogin && styles.activeTabText]}>Registo</Text>
-          </TouchableOpacity>
-        </View>
+            {/* SEPARADORES (TAB LOGIN / REGISTO) */}
+            <View style={styles.tabContainer}>
+              <TouchableOpacity
+                style={[styles.tabButton, isLogin && styles.activeTab]}
+                onPress={() => toggleAuth('login')}
+              >
+                <Text style={[styles.tabText, isLogin && styles.activeTabText]}>Login</Text>
+              </TouchableOpacity>
 
-        {/* CONTEÚDO QUE DESVANECE AO TROCAR */}
-        <Animated.View style={{ width: '100%', opacity: switchFade, alignItems: 'center' }}>
-          <Text style={styles.title}>
-            {isLogin ? 'Bem-vindo de volta' : 'Crie a sua conta S.A.F.E.'}
-          </Text>
+              <TouchableOpacity
+                style={[styles.tabButton, !isLogin && styles.activeTab]}
+                onPress={() => toggleAuth('register')}
+              >
+                <Text style={[styles.tabText, !isLogin && styles.activeTabText]}>Registo</Text>
+              </TouchableOpacity>
+            </View>
 
-          {/* CAMPOS EXCLUSIVOS DO REGISTO (SEM SELETOR DE CARGO) */}
-          {!isLogin && (
-            <>
-              <TextInput 
-                style={styles.input} 
-                placeholder="Nome Completo" 
-                placeholderTextColor="#999" 
-                value={nome}
-                onChangeText={setNome}
+            {/* CONTEÚDO QUE DESVANECE AO ALTERNAR AS TABS */}
+            <Animated.View style={{ width: '100%', opacity: switchFade, alignItems: 'center' }}>
+              <Text style={styles.title}>
+                {isLogin ? 'Bem-vindo de volta' : 'Crie a sua conta S.A.F.E.'}
+              </Text>
+
+              {/* CAMPOS EXCLUSIVOS DO REGISTO */}
+              {!isLogin && (
+                <>
+                  <TextInput 
+                    style={styles.input} 
+                    placeholder="Nome Completo" 
+                    placeholderTextColor="#999" 
+                    value={nome}
+                    onChangeText={setNome}
+                  />
+                  <TextInput 
+                    style={styles.input} 
+                    placeholder="NIF" 
+                    keyboardType="numeric"
+                    placeholderTextColor="#999" 
+                    value={nif}
+                    onChangeText={setNif}
+                  />
+                </>
+              )}
+
+              {/* CAMPOS COMUNS (EMAIL E PASSWORD) */}
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholderTextColor="#999"
+                value={email}
+                onChangeText={setEmail}
               />
-              <TextInput 
-                style={styles.input} 
-                placeholder="NIF" 
-                keyboardType="numeric"
-                placeholderTextColor="#999" 
-                value={nif}
-                onChangeText={setNif}
+
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                secureTextEntry
+                placeholderTextColor="#999"
+                value={password}
+                onChangeText={setPassword}
               />
-            </>
-          )}
 
-          {/* CAMPOS COMUNS (EMAIL E PASSWORD) */}
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholderTextColor="#999"
-            value={email}
-            onChangeText={setEmail}
-          />
+              {/* BOTÃO DE SUBMISSÃO COM RENDERIZAÇÃO CONDICIONAL DE LOADING */}
+              <TouchableOpacity 
+                style={styles.button} 
+                onPress={handleAuthentication}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.buttonText}>{isLogin ? 'Entrar' : 'Criar Conta'}</Text>
+                )}
+              </TouchableOpacity>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            secureTextEntry
-            placeholderTextColor="#999"
-            value={password}
-            onChangeText={setPassword}
-          />
+              {/* LINKS ADICIONAIS CONSOANTE O SEPARADOR ATIVO */}
+              {isLogin ? (
+                <TouchableOpacity onPress={handleForgotPassword}>
+                  <Text style={styles.linkText}>Esqueceu-se da password?</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.linkText}>Ao registar-se aceita os Termos de Serviço.</Text>
+              )}
 
-          {/* BOTÃO DE SUBMISSÃO COM LOADING */}
-          <TouchableOpacity 
-            style={styles.button} 
-            onPress={handleAuthentication}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={styles.buttonText}>{isLogin ? 'Entrar' : 'Criar Conta'}</Text>
-            )}
-          </TouchableOpacity>
+            </Animated.View>
+          </Animated.View>
 
-          {/* LINKS ADICIONAIS */}
-          {isLogin ? (
-            <TouchableOpacity onPress={handleForgotPassword}>
-              <Text style={styles.linkText}>Esqueceu-se da password?</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.linkText}>Ao registar-se aceita os Termos de Serviço.</Text>
-          )}
-
-        </Animated.View>
-      </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

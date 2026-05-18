@@ -1,0 +1,135 @@
+import { StyleSheet } from 'react-native';
+
+export const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#F4F6F9',
+  },
+  keyboardAvoid: {
+    flex: 1,
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+  },
+  headerContainer: {
+    marginBottom: 25,
+    alignItems: 'center',
+  },
+  mainTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#1A5276',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  orgText: {
+    fontSize: 16,
+    color: '#5D6D7E',
+  },
+  orgNameHighlight: {
+    fontWeight: '700',
+    color: '#2C3E50',
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    padding: 25,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 5,
+    marginBottom: 20,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2C3E50',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    backgroundColor: '#F2F4F4',
+    borderRadius: 12,
+    padding: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  inactiveToggle: {
+    backgroundColor: 'transparent',
+  },
+  activeSocorrista: {
+    backgroundColor: '#27AE60',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  activeOperador: {
+    backgroundColor: '#E67E22',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  toggleText: {
+    fontWeight: '700',
+    color: '#7F8C8D',
+    fontSize: 14,
+  },
+  activeToggleText: {
+    color: '#FFFFFF',
+  },
+  input: {
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E8E8',
+    marginBottom: 15,
+    fontSize: 15,
+    color: '#2C3E50',
+  },
+  submitButton: {
+    backgroundColor: '#1A5276',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 5,
+    shadowColor: '#1A5276',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  logoutButton: {
+    backgroundColor: '#34495E',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginHorizontal: 10,
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  }
+});
