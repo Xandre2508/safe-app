@@ -1,141 +1,176 @@
-import { Platform, StyleSheet } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native'; // <-- NOVO IMPORT
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { useCallback, useState } from 'react'; // <-- IMPORTAMOS useCallback
+import { KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import EmergencyChat from '../components/EmergencyChat';
+import { auth, db } from '../firebaseConfig';
+import { styles } from '../styles/OperatorDashboardStyles';
 
-export const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F4F6F9',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 20 : 10,
-  },
-  headerContainer: {
-    marginVertical: 20,
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#1A5276',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  statCard: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 20,
-    paddingHorizontal: 15,
-    borderRadius: 16,
-    flex: 0.48,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-    borderBottomWidth: 4, // Linha de destaque na base do cartão
-  },
-  statCardActive: {
-    borderBottomColor: '#E74C3C', // Vermelho
-  },
-  statCardDone: {
-    borderBottomColor: '#27AE60', // Verde
-  },
-  statTitle: {
-    color: '#7F8C8D',
-    fontWeight: '700',
-    fontSize: 13,
-    textTransform: 'uppercase',
-    marginBottom: 5,
-  },
-  statNumberActive: {
-    color: '#E74C3C',
-    fontSize: 32,
-    fontWeight: '900',
-  },
-  statNumberDone: {
-    color: '#27AE60',
-    fontSize: 32,
-    fontWeight: '900',
-  },
-  scrollList: {
-    flex: 1,
-  },
-  incidentCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 14,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
-    borderLeftWidth: 5, // Linha de cor na lateral para identificar rápido
-  },
-  incidentCardActive: {
-    borderLeftColor: '#E74C3C',
-  },
-  incidentCardDone: {
-    borderLeftColor: '#27AE60',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  victimName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#2C3E50',
-    flex: 1, // Faz com que o nome ocupe o espaço sem empurrar a badge
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeActive: {
-    backgroundColor: '#FDEDEC', // Fundo vermelho muito claro
-  },
-  badgeDone: {
-    backgroundColor: '#EAFAF1', // Fundo verde muito claro
-  },
-  badgeTextActive: {
-    color: '#E74C3C',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  badgeTextDone: {
-    color: '#27AE60',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  coordsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA', // Fundo acinzentado para destacar as coordenadas
-    padding: 10,
-    borderRadius: 8,
-  },
-  coordsText: {
-    fontSize: 13,
-    color: '#5D6D7E',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    marginLeft: 8,
-  },
-  exitButton: {
-    backgroundColor: '#34495E', // Um azul noite/cinza escuro mais elegante que o preto puro
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  exitButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16,
-  }
-});
+export default function OperatorDashboard({ navigation }) {
+  const [todasOcorrencias, setTodasOcorrencias] = useState([]);
+  const [selectedIncidentId, setSelectedIncidentId] = useState(null);
+
+  const selectedIncident = todasOcorrencias.find(r => r.id === selectedIncidentId);
+
+  // CORREÇÃO: Substituímos o useEffect pelo useFocusEffect
+  // Isto garante que o ecrã refaz a ligação à base de dados SEMPRE que o operador abre a app
+  useFocusEffect(
+    useCallback(() => {
+      const q = query(collection(db, 'sos_requests'));
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        let requests = [];
+        snapshot.forEach((doc) => requests.push({ id: doc.id, ...doc.data() }));
+        
+        requests.sort((a, b) => {
+          if (a.status === 'pendente' && b.status !== 'pendente') return -1;
+          if (a.status !== 'pendente' && b.status === 'pendente') return 1;
+          return 0; // Opcional: Aqui podíamos ordenar por data para ter os mais recentes no topo
+        });
+
+        setTodasOcorrencias(requests);
+      });
+
+      // Limpa a ligação quando o operador sai do ecrã (ex: faz logout)
+      return () => unsubscribe();
+    }, [])
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      
+      {/* BOTÃO DE PERFIL FLUTUANTE */}
+      {!selectedIncidentId && (
+        <TouchableOpacity 
+          style={{
+            position: 'absolute',
+            top: 15,
+            left: 15,
+            zIndex: 999,
+            backgroundColor: '#FFFFFF',
+            width: 50,
+            height: 50,
+            borderRadius: 25,
+            justifyContent: 'center',
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.3,
+            shadowRadius: 4,
+            elevation: 5,
+          }}
+          onPress={() => navigation.navigate('ProfileScreen')}
+        >
+          <Text style={{ fontSize: 24 }}>👤</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* VISTA A: LISTAGEM COMPLETA DE OCORRÊNCIAS */}
+      {!selectedIncidentId ? (
+        <>
+          <View style={styles.headerContainer}>
+            <Text style={styles.title}>Central de Operações</Text>
+          </View>
+          
+          <View style={styles.statsContainer}>
+            <View style={[styles.statCard, styles.statCardActive]}>
+               <Text style={styles.statTitle}>SOS Ativos</Text>
+               <Text style={styles.statNumberActive}>{todasOcorrencias.filter(r => r.status === 'pendente').length}</Text>
+            </View>
+            
+            <View style={[styles.statCard, styles.statCardDone]}>
+               <Text style={styles.statTitle}>Concluídos</Text>
+               <Text style={styles.statNumberDone}>{todasOcorrencias.filter(r => r.status === 'concluido').length}</Text>
+            </View>
+          </View>
+
+          <ScrollView style={styles.scrollList} showsVerticalScrollIndicator={false}>
+            {todasOcorrencias.map((req) => {
+              const isPendente = req.status === 'pendente';
+              return (
+                <TouchableOpacity 
+                  key={req.id} 
+                  style={[styles.incidentCard, isPendente ? styles.incidentCardActive : styles.incidentCardDone]}
+                  onPress={() => setSelectedIncidentId(req.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.victimName} numberOfLines={1}>
+                      {req.userName && req.userName.trim() !== '' ? req.userName : 'Vítima Desconhecida'}
+                    </Text>
+                    <View style={[styles.badge, isPendente ? styles.badgeActive : styles.badgeDone]}>
+                      <Text style={isPendente ? styles.badgeTextActive : styles.badgeTextDone}>
+                        {isPendente ? 'PENDENTE' : 'CONCLUÍDO'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.coordsContainer}>
+                    <Text style={{fontSize: 14}}>📍</Text>
+                    <Text style={styles.coordsText}>Lat: {req.latitude?.toFixed(4)} | Lon: {req.longitude?.toFixed(4)}</Text>
+                  </View>
+                  {req.detalhes && isPendente && (
+                    <Text style={{ fontSize: 12, color: '#E74C3C', marginTop: 5, fontWeight: '500' }}>
+                      ⚠️ {req.detalhes.criancas ? "Crianças Presentes" : req.detalhes.gravida ? "Grávida na ocorrência" : `Idade: ${req.detalhes.idade}`}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <TouchableOpacity style={styles.exitButton} onPress={() => navigation.navigate('Login')} activeOpacity={0.8}>
+              <Text style={styles.exitButtonText}>Sair da Central</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        
+        // VISTA B: INTERFACE DE GESTÃO TÁTICA E CHAT COM A VÍTIMA SELECIONADA
+        selectedIncident && (
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+            style={{ flex: 1, width: '100%', padding: 15 }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <TouchableOpacity 
+                style={{ backgroundColor: '#BDC3C7', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 8 }}
+                onPress={() => setSelectedIncidentId(null)}
+              >
+                <Text style={{ color: '#333', fontWeight: 'bold' }}>⬅ Voltar</Text>
+              </TouchableOpacity>
+              
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#2C3E50', flex: 1, textAlign: 'right', marginRight: 5 }} numberOfLines={1}>
+                {selectedIncident.userName}
+              </Text>
+            </View>
+
+            <View style={{ backgroundColor: '#FFF', padding: 12, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#BDC3C7', shadowOpacity: 0.05, elevation: 2 }}>
+              <Text style={{ fontWeight: 'bold', color: '#7F8C8D', marginBottom: 5, fontSize: 12 }}>DADOS DE TRIAGEM COLETADOS:</Text>
+              <Text style={{ fontSize: 14, color: '#333' }}>📍 Coordenadas: {selectedIncident.latitude?.toFixed(5)}, {selectedIncident.longitude?.toFixed(5)}</Text>
+              <Text style={{ fontSize: 14, color: '#333' }}>🎂 Idade Declarada: {selectedIncident.detalhes?.idade || 'Não informada'}</Text>
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: selectedIncident.detalhes?.criancas || selectedIncident.detalhes?.gravida ? '#E74C3C' : '#27AE60' }}>
+                🚨 Estado: {selectedIncident.detalhes?.criancas ? "CRÍTICO (Crianças Presentes)" : selectedIncident.detalhes?.gravida ? "CRÍTICO (Grávida)" : "Atendimento Padrão"}
+              </Text>
+            </View>
+
+            <View style={{ flex: 1 }}>
+              {selectedIncident.status === 'pendente' ? (
+                <EmergencyChat 
+                  sosId={selectedIncidentId} 
+                  currentUserRole="operador" 
+                  currentUserId={auth.currentUser ? auth.currentUser.uid : 'operador_anonimo'} 
+                />
+              ) : (
+                <View style={{ flex: 1, backgroundColor: '#EAFAF1', padding: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#27AE60' }}>
+                  <Text style={{ fontSize: 28, marginBottom: 10 }}>✅</Text>
+                  <Text style={{ color: '#27AE60', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>
+                    Esta ocorrência foi marcada como concluída por um socorrista. O chat em tempo real encontra-se arquivado.
+                  </Text>
+                </View>
+              )}
+            </View>
+          </KeyboardAvoidingView>
+        )
+      )}
+    </SafeAreaView>
+  );
+}

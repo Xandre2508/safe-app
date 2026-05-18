@@ -1,9 +1,10 @@
 import * as Location from 'expo-location';
 import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, SafeAreaView, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-maps';
 
+import EmergencyChat from '../components/EmergencyChat';
 import { Strings } from '../constants/Strings';
 import { auth, db } from '../firebaseConfig';
 import { styles } from '../styles/VictimDashboardStyles';
@@ -15,9 +16,13 @@ export default function VictimDashboard({ navigation }) {
   const [userName, setUserName] = useState('');
   const [showDetailsForm, setShowDetailsForm] = useState(false); 
 
+  // Estados do Formulário SOS
   const [idade, setIdade] = useState('');
   const [estaGravida, setEstaGravida] = useState(false);
   const [temCriancas, setTemCriancas] = useState(false);
+
+  // Estado para controlar o ID do SOS ativo para o Chat
+  const [activeSosId, setActiveSosId] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -60,7 +65,8 @@ export default function VictimDashboard({ navigation }) {
     setIsSending(true);
 
     try {
-      await addDoc(collection(db, 'sos_requests'), {
+      // 1. Cria o documento principal de SOS
+      const docRef = await addDoc(collection(db, 'sos_requests'), {
         userId: auth.currentUser ? auth.currentUser.uid : 'anonimo',
         userEmail: auth.currentUser ? auth.currentUser.email : 'N/A',
         userName: userName || 'Utilizador Desconhecido', 
@@ -75,12 +81,22 @@ export default function VictimDashboard({ navigation }) {
         timestamp: serverTimestamp()
       });
 
-      Alert.alert(Strings.victim.sosSentTitle, Strings.victim.sosSentMessage);
-      
+      // 2. Cria a mensagem automática inicial do sistema
+      await addDoc(collection(db, 'sos_requests', docRef.id, 'messages'), {
+        senderId: 'system',
+        senderRole: 'sistema',
+        text: 'O seu pedido de SOS foi recebido. Um operador irá responder em breve. Por favor, mantenha a calma.',
+        timestamp: serverTimestamp()
+      });
+
+      // 3. Ativa o Chat e limpa o formulário
+      setActiveSosId(docRef.id);
       setShowDetailsForm(false);
       setIdade('');
       setEstaGravida(false);
       setTemCriancas(false);
+
+      Alert.alert(Strings.victim.sosSentTitle, Strings.victim.sosSentMessage);
 
     } catch (error) {
       Alert.alert(Strings.error, Strings.victim.sosError);
@@ -100,7 +116,7 @@ export default function VictimDashboard({ navigation }) {
       <TouchableOpacity 
         style={{
           position: 'absolute',
-          top: 45, // Ajustado ligeiramente para baixo para SafeArea no iPhone
+          top: 45, 
           left: 15,
           zIndex: 999,
           backgroundColor: '#FFFFFF',
@@ -124,64 +140,88 @@ export default function VictimDashboard({ navigation }) {
         <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />
       </View>
 
-      <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false}>
-        {!showDetailsForm ? (
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={[styles.actionButton, styles.btnSOS]} onPress={() => setShowDetailsForm(true)}>
-              <Text style={styles.btnText}>{Strings.victim.btnSOS}</Text>
-              <Text style={styles.btnSubText}>{Strings.victim.btnSOSSub}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.actionButton, styles.btnApoio]} onPress={handleApoio}>
-              <Text style={styles.btnText}>{Strings.victim.btnSupport}</Text>
-              <Text style={styles.btnSubText}>{Strings.victim.btnSupportSub}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={{ backgroundColor: '#f9f9f9', padding: 15, borderRadius: 10, marginBottom: 20 }}>
-            <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>Detalhes para o Resgate (Opcional):</Text>
-            
-            <TextInput
-              style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#ccc', marginBottom: 15, padding: 8, borderRadius: 5 }}
-              placeholder="A sua Idade (ex: 35)"
-              keyboardType="numeric"
-              value={idade}
-              onChangeText={setIdade}
-            />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-              <Text>Está grávida?</Text>
-              <Switch value={estaGravida} onValueChange={setEstaGravida} />
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <Text>Tem crianças consigo?</Text>
-              <Switch value={temCriancas} onValueChange={setTemCriancas} />
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <TouchableOpacity style={{ backgroundColor: '#ccc', padding: 15, borderRadius: 10, flex: 0.4, alignItems: 'center' }} onPress={() => setShowDetailsForm(false)}>
-                <Text style={{ color: '#333', fontWeight: 'bold' }}>Cancelar</Text>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        style={{ flex: 1 }}
+      >
+        <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          
+          {/* MODO 1: BOTÕES INICIAIS */}
+          {!showDetailsForm && !activeSosId && (
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={[styles.actionButton, styles.btnSOS]} onPress={() => setShowDetailsForm(true)}>
+                <Text style={styles.btnText}>{Strings.victim.btnSOS}</Text>
+                <Text style={styles.btnSubText}>{Strings.victim.btnSOSSub}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.btnSOS, { padding: 15, borderRadius: 10, flex: 0.55, alignItems: 'center' }]} onPress={handleConfirmSOS} disabled={isSending}>
-                {isSending ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>CONFIRMAR SOS</Text>}
+              <TouchableOpacity style={[styles.actionButton, styles.btnApoio]} onPress={handleApoio}>
+                <Text style={styles.btnText}>{Strings.victim.btnSupport}</Text>
+                <Text style={styles.btnSubText}>{Strings.victim.btnSupportSub}</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        )}
+          )}
 
-        <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>{Strings.victim.emergencyStateTitle}</Text>
-          <Text style={styles.alertText}>{Strings.victim.criticalAlert}</Text>
-          <Text style={styles.infoText}>{Strings.victim.fireInfo}</Text>
-          <Text style={styles.infoText}>{Strings.victim.followInstructions}</Text>
-        </View>
+          {/* MODO 2: FORMULÁRIO SOS OPCIONAL */}
+          {showDetailsForm && !activeSosId && (
+            <View style={{ backgroundColor: '#f9f9f9', padding: 15, borderRadius: 10, marginBottom: 20 }}>
+              <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>Detalhes para o Resgate (Opcional):</Text>
+              
+              <TextInput
+                style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#ccc', marginBottom: 15, padding: 8, borderRadius: 5 }}
+                placeholder="A sua Idade (ex: 35)"
+                keyboardType="numeric"
+                value={idade}
+                onChangeText={setIdade}
+              />
 
-        <TouchableOpacity style={styles.logoutButton} onPress={() => navigation.navigate('Login')}>
-          <Text style={styles.logoutButtonText}>{Strings.logout}</Text>
-        </TouchableOpacity>
-      </ScrollView>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                <Text>Está grávida?</Text>
+                <Switch value={estaGravida} onValueChange={setEstaGravida} />
+              </View>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <Text>Tem crianças consigo?</Text>
+                <Switch value={temCriancas} onValueChange={setTemCriancas} />
+              </View>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <TouchableOpacity style={{ backgroundColor: '#ccc', padding: 15, borderRadius: 10, flex: 0.4, alignItems: 'center' }} onPress={() => setShowDetailsForm(false)}>
+                  <Text style={{ color: '#333', fontWeight: 'bold' }}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.btnSOS, { padding: 15, borderRadius: 10, flex: 0.55, alignItems: 'center' }]} onPress={handleConfirmSOS} disabled={isSending}>
+                  {isSending ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>CONFIRMAR SOS</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* MODO 3: CHAT DE EMERGÊNCIA ATIVO */}
+          {activeSosId && (
+            <View style={[styles.statusCard, { borderLeftColor: '#E74C3C', height: 320, padding: 0, overflow: 'hidden' }]}>
+              <EmergencyChat 
+                sosId={activeSosId} 
+                currentUserRole="vitima" 
+                currentUserId={auth.currentUser ? auth.currentUser.uid : 'anonimo'} 
+              />
+            </View>
+          )}
+
+          {/* CARTÃO DE ESTADO DE EMERGÊNCIA (Ocultado apenas durante o preenchimento do formulário) */}
+          {!showDetailsForm && (
+            <View style={styles.statusCard}>
+              <Text style={styles.statusTitle}>{Strings.victim.emergencyStateTitle || 'Estado de Emergência: PORTO'}</Text>
+              <Text style={styles.alertText}>{Strings.victim.criticalAlert || '🔥 ALERTA CRÍTICO 🔥'}</Text>
+              <Text style={styles.infoText}>{Strings.victim.fireInfo || 'Incêndio ativo a 12km de distância.'}</Text>
+              <Text style={styles.infoText}>{Strings.victim.followInstructions || 'Siga as instruções das autoridades.'}</Text>
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.logoutButton} onPress={() => navigation.navigate('Login')}>
+            <Text style={styles.logoutButtonText}>{Strings.logout || 'Sair / Voltar ao Login'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
