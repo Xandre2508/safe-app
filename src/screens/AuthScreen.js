@@ -15,6 +15,7 @@ import styles from '../styles/AuthScreenStyles';
 // --- IMPORTAÇÕES DO FIREBASE ---
 import {
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -23,16 +24,13 @@ import { auth, db } from '../firebaseConfig';
 export default function AuthScreen({ navigation }) {
   // --- 1. ESTADOS (STATE) ---
   const [isLogin, setIsLogin] = useState(true);
-  const [loading, setLoading] = useState(false); // Estado para controlar o loading do botão
+  const [loading, setLoading] = useState(false);
   
   // Dados do formulário
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [nif, setNif] = useState('');
   const [password, setPassword] = useState('');
-  
-  // Tipo de conta (Vítima ou Socorrista)
-  const [userRole, setUserRole] = useState('vitima');
 
   // --- 2. ANIMAÇÕES (REFS) ---
   const logoTranslateY = useRef(new Animated.Value(0)).current;
@@ -67,6 +65,8 @@ export default function AuthScreen({ navigation }) {
     }).start(() => {
       setIsLogin(type === 'login');
       // Limpa os campos ao trocar de separador
+      setNome('');
+      setNif('');
       setPassword(''); 
       Animated.timing(switchFade, {
         toValue: 1,
@@ -76,9 +76,22 @@ export default function AuthScreen({ navigation }) {
     });
   };
 
-  // --- 5. LÓGICA DE AUTENTICAÇÃO REAL (FIREBASE) ---
+  // --- 5. RECUPERAÇÃO DE PASSWORD ---
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert('Atenção', 'Por favor, insira o seu email no campo para redefinir a password.');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert('Sucesso', `Um link de redefinição foi enviado para: ${email}`);
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível enviar o email de recuperação. Verifique o endereço digitado.');
+    }
+  };
+
+  // --- 6. LÓGICA DE AUTENTICAÇÃO REAL (FIREBASE) ---
   const handleAuthentication = async () => {
-    // Validação básica de campos vazios
     if (isLogin) {
       if (!email || !password) {
         Alert.alert('Erro', 'Por favor, preencha o email e a password.');
@@ -86,79 +99,71 @@ export default function AuthScreen({ navigation }) {
       }
     } else {
       if (!nome || !email || !nif || !password) {
-        Alert.alert('Erro', 'Por favor, preencha todos os campos.');
+        Alert.alert('Erro', 'Por favor, preencha todos os campos do registo.');
         return;
       }
     }
 
-    setLoading(true); // Ativa o indicador de carregamento
+    setLoading(true);
 
     try {
       if (isLogin) {
         // --- PROCESSO DE LOGIN ---
-        // 1. Autentica no Firebase Auth
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // 2. Procura o perfil do utilizador no Firestore para saber o cargo (role)
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data();
           
-          // 3. Redireciona consoante o cargo guardado na BD
+          // Encaminhamento dinâmico conforme o cargo guardado na BD
           if (userData.role === 'vitima') {
             navigation.navigate('VictimDashboard');
-          } else {
+          } else if (userData.role === 'socorrista') {
             navigation.navigate('RescuerDashboard');
+          } else if (userData.role === 'operador') {
+            navigation.navigate('OperatorDashboard');
+          } else if (userData.role === 'organizacao') {
+            navigation.navigate('AdminDashboard');
           }
         } else {
           Alert.alert('Erro', 'Não foi encontrado um perfil para este utilizador.');
         }
 
       } else {
-        // --- PROCESSO DE REGISTO ---
-        // 1. Cria o utilizador no Firebase Auth (Email/Pass)
+        // --- PROCESSO DE REGISTO (AUTOMATICAMENTE VÍTIMA) ---
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // 2. Cria o documento do utilizador no Firestore com os dados extra
-        // Usamos o UID do Auth como ID do documento para ligação direta
+        // Guarda os dados diretamente com o cargo 'vitima'
         await setDoc(doc(db, 'users', user.uid), {
           nome: nome,
           email: email,
           nif: nif,
-          role: userRole, // 'vitima' ou 'socorrista'
+          role: 'vitima', 
           createdAt: new Date().toISOString()
         });
 
-        Alert.alert('Sucesso', `Conta de ${userRole} criada com sucesso!`);
-        
-        // 3. Redireciona logo após o registo
-        if (userRole === 'vitima') {
-          navigation.navigate('VictimDashboard');
-        } else {
-          navigation.navigate('RescuerDashboard');
-        }
+        Alert.alert('Sucesso', 'Conta S.A.F.E. criada com sucesso!');
+        navigation.navigate('VictimDashboard');
       }
     } catch (error) {
-      // Tratamento de erros amigável
       console.error(error);
       let errorMessage = 'Ocorreu um erro inesperado.';
       
       if (error.code === 'auth/email-already-in-use') errorMessage = 'Este email já está registado.';
       if (error.code === 'auth/weak-password') errorMessage = 'A password deve ter pelo menos 6 caracteres.';
       if (error.code === 'auth/invalid-credential') errorMessage = 'Credenciais incorretas.';
-      if (error.code === 'auth/user-not-found') errorMessage = 'Utilizador não encontrado.';
 
       Alert.alert('Erro', errorMessage);
     } finally {
-      setLoading(false); // Desliga o loading independentemente do resultado
+      setLoading(false);
     }
   };
 
-  // --- 6. INTERFACE (UI) ---
+  // --- 7. INTERFACE (UI) ---
   return (
     <SafeAreaView style={styles.container}>
       
@@ -197,7 +202,7 @@ export default function AuthScreen({ navigation }) {
             {isLogin ? 'Bem-vindo de volta' : 'Crie a sua conta S.A.F.E.'}
           </Text>
 
-          {/* CAMPOS EXCLUSIVOS DO REGISTO */}
+          {/* CAMPOS EXCLUSIVOS DO REGISTO (SEM SELETOR DE CARGO) */}
           {!isLogin && (
             <>
               <TextInput 
@@ -215,22 +220,6 @@ export default function AuthScreen({ navigation }) {
                 value={nif}
                 onChangeText={setNif}
               />
-
-              {/* SELETOR DE TIPO DE CONTA */}
-              <View style={styles.roleContainer}>
-                <TouchableOpacity 
-                  style={[styles.roleButton, userRole === 'vitima' && styles.activeRoleVitima]} 
-                  onPress={() => setUserRole('vitima')}
-                >
-                  <Text style={[styles.roleText, userRole === 'vitima' && styles.activeRoleText]}>Vítima</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.roleButton, userRole === 'socorrista' && styles.activeRoleSocorrista]} 
-                  onPress={() => setUserRole('socorrista')}
-                >
-                  <Text style={[styles.roleText, userRole === 'socorrista' && styles.activeRoleText]}>Socorrista</Text>
-                </TouchableOpacity>
-              </View>
             </>
           )}
 
@@ -269,7 +258,7 @@ export default function AuthScreen({ navigation }) {
 
           {/* LINKS ADICIONAIS */}
           {isLogin ? (
-            <TouchableOpacity>
+            <TouchableOpacity onPress={handleForgotPassword}>
               <Text style={styles.linkText}>Esqueceu-se da password?</Text>
             </TouchableOpacity>
           ) : (
