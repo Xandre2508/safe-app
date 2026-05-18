@@ -2,10 +2,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 
 // Importação dos nossos ecrãs
-import AuthScreen from './src/screens/AuthScreen'; // <-- FALTAVA ESTA LINHA!
+import AuthScreen from './src/screens/AuthScreen';
 import RescuerDashboard from './src/screens/RescuerDashboard';
 import VictimDashboard from './src/screens/VictimDashboard';
-
 const Stack = createStackNavigator();
 
 export default function App() {
