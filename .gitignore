@@ -43,7 +43,7 @@ app-example
 /android
 
 # firebase de dados config
-
+firebaseConfig.js
 
 #ApiKey para Noticias 
 .env
