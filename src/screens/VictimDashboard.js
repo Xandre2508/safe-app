@@ -105,6 +105,31 @@ export default function VictimDashboard({ navigation }) {
     }
   };
 
+  const handleCancelSOS = () => {
+    Alert.alert(
+      "Cancelar Emergência",
+      "Tem a certeza que já se encontra em segurança e deseja cancelar este pedido de SOS?",
+      [
+        { text: "Não", style: "cancel" },
+        {
+          text: "Sim, Cancelar",
+          onPress: async () => {
+            if (activeSosId) {
+              try {
+                // Atualiza o estado na base de dados para 'cancelado'
+                await updateDoc(doc(db, 'sos_requests', activeSosId), { status: 'cancelado' });
+                setActiveSosId(null); // Fecha o chat e volta ao ecrã inicial
+                Alert.alert("Cancelado", "O seu pedido de socorro foi cancelado com sucesso.");
+              } catch (error) {
+                Alert.alert("Erro", "Não foi possível cancelar o pedido.");
+              }
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleApoio = () => {
     Alert.alert(Strings.victim.supportAlertTitle, Strings.victim.supportAlertMessage);
   };
