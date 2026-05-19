@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'; // <-- Adicionado ScrollView, KeyboardAvoidingView e Platform
-import { auth, db } from '../firebaseConfig';
+import { auth, db } from '../../src/firebaseConfig';
 import { styles } from '../styles/ProfileScreenStyles';
 
 export default function ProfileScreen({ navigation }) {

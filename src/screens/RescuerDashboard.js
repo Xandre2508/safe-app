@@ -3,7 +3,7 @@ import { collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/f
 import { useEffect, useState } from 'react';
 import { Alert, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import { db } from '../firebaseConfig';
+import { db } from '../../src/firebaseConfig';
 
 import { Strings } from '../constants/Strings';
 import { styles } from '../styles/RescuerDashboardStyles';

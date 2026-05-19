@@ -2,8 +2,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import { KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { auth, db } from '../../src/firebaseConfig';
 import EmergencyChat from '../components/EmergencyChat';
-import { auth, db } from '../firebaseConfig';
 import { styles } from '../styles/OperatorDashboardStyles';
 
 export default function OperatorDashboard({ navigation }) {

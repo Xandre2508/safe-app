@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { auth, db } from '../firebaseConfig';
+import { auth, db } from '../../src/firebaseConfig';
 import { styles } from '../styles/AdminDashboardStyles';
 
 export default function AdminDashboard({ navigation }) {

@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-maps';
 
+import { auth, db } from '../../src/firebaseConfig';
 import EmergencyChat from '../components/EmergencyChat';
 import { Strings } from '../constants/Strings';
-import { auth, db } from '../firebaseConfig';
 import { styles } from '../styles/VictimDashboardStyles';
 
 export default function VictimDashboard({ navigation }) {

@@ -22,7 +22,7 @@ import {
   signInWithEmailAndPassword
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../firebaseConfig';
+import { auth, db } from '../../src/firebaseConfig';
 
 export default function AuthScreen({ navigation }) {
   // --- 1. ESTADOS (STATE) ---
