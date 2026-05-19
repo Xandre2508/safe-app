@@ -1,11 +1,26 @@
+import * as ImagePicker from 'expo-image-picker';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native'; // <-- Adicionado ScrollView, KeyboardAvoidingView e Platform
 import { auth, db } from '../firebaseConfig';
+import { styles } from '../styles/ProfileScreenStyles';
 
 export default function ProfileScreen({ navigation }) {
   const [userData, setUserData] = useState(null);
   const [nome, setNome] = useState('');
+  const [profileImage, setProfileImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -19,6 +34,7 @@ export default function ProfileScreen({ navigation }) {
             const data = docSnap.data();
             setUserData(data);
             setNome(data.nome || '');
+            setProfileImage(data.profileImage || null); 
           }
         }
       } catch (error) {
@@ -30,11 +46,27 @@ export default function ProfileScreen({ navigation }) {
     fetchProfile();
   }, []);
 
+  const handlePickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5, 
+    });
+
+    if (!result.canceled) {
+      setProfileImage(result.assets[0].uri); 
+    }
+  };
+
   const handleUpdateProfile = async () => {
     setSaving(true);
     try {
       const docRef = doc(db, 'users', auth.currentUser.uid);
-      await updateDoc(docRef, { nome: nome });
+      await updateDoc(docRef, { 
+        nome: nome,
+        profileImage: profileImage 
+      });
       Alert.alert("Sucesso", "Perfil atualizado com sucesso!");
     } catch (error) {
       Alert.alert("Erro", "Falha ao atualizar o perfil.");
@@ -43,39 +75,90 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
-  if (loading) return <View style={{flex: 1, justifyContent: 'center'}}><ActivityIndicator size="large" color="#1A5276" /></View>;
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#1A5276" />
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F7FA', padding: 20 }}>
-      <Text style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 20, color: '#333' }}>O Meu Perfil</Text>
+    <SafeAreaView style={styles.container}>
+      {/* O KeyboardAvoidingView e ScrollView garantem que o conteúdo seja "scrollável" */}
+      <KeyboardAvoidingView 
+        style={{ flex: 1, width: '100%' }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView 
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center',  paddingBottom: 20 }} 
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.card}>
+            <Text style={styles.title}>O Meu Perfil</Text>
 
-      <View style={{ backgroundColor: '#FFF', padding: 20, borderRadius: 15, shadowOpacity: 0.1, elevation: 3 }}>
-        
-        {/* Mostra a Organização caso seja um Socorrista ou Operador */}
-        {userData?.organizacao && (
-          <View style={{ backgroundColor: '#E8F8F5', padding: 10, borderRadius: 8, marginBottom: 15 }}>
-            <Text style={{ color: '#117A65', fontWeight: 'bold' }}>Vínculo Profissional:</Text>
-            <Text style={{ color: '#117A65' }}>{userData.organizacao}</Text>
+            <View style={styles.avatarContainer}>
+              <TouchableOpacity onPress={handlePickImage}>
+                {profileImage ? (
+                  <Image source={{ uri: profileImage }} style={styles.avatar} />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={{ fontSize: 50 }}>👤</Text>
+                  </View>
+                )}
+                
+                <View style={styles.editAvatarButton}>
+                  <Text style={{ fontSize: 16, color: '#FFF' }}>📷</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {userData?.organizacao && (
+              <View style={styles.orgBadge}>
+                <Text style={styles.orgBadgeTitle}>Vínculo Profissional:</Text>
+                <Text style={styles.orgBadgeName}>{userData.organizacao}</Text>
+              </View>
+            )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Cargo / Tipo de Conta</Text>
+              <TextInput 
+                style={styles.disabledInput} 
+                value={userData?.role.toUpperCase()} 
+                editable={false} 
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email Associado</Text>
+              <TextInput 
+                style={styles.disabledInput} 
+                value={userData?.email} 
+                editable={false} 
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Nome Completo</Text>
+              <TextInput 
+                style={styles.input} 
+                value={nome} 
+                onChangeText={setNome} 
+                placeholder="O seu nome..."
+              />
+            </View>
+
+            <TouchableOpacity style={styles.saveButton} onPress={handleUpdateProfile} disabled={saving}>
+              {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveButtonText}>Guardar Alterações</Text>}
+            </TouchableOpacity>
           </View>
-        )}
 
-        <Text style={{ color: '#7F8C8D', marginBottom: 5 }}>Cargo / Tipo de Conta</Text>
-        <TextInput style={{ backgroundColor: '#EAECEE', padding: 12, borderRadius: 8, marginBottom: 15, color: '#7F8C8D' }} value={userData?.role.toUpperCase()} editable={false} />
-
-        <Text style={{ color: '#7F8C8D', marginBottom: 5 }}>Email</Text>
-        <TextInput style={{ backgroundColor: '#EAECEE', padding: 12, borderRadius: 8, marginBottom: 15, color: '#7F8C8D' }} value={userData?.email} editable={false} />
-
-        <Text style={{ color: '#333', fontWeight: 'bold', marginBottom: 5 }}>Nome Completo</Text>
-        <TextInput style={{ backgroundColor: '#FAFAFA', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#DDD', marginBottom: 20 }} value={nome} onChangeText={setNome} />
-
-        <TouchableOpacity style={{ backgroundColor: '#1A5276', padding: 15, borderRadius: 8, alignItems: 'center' }} onPress={handleUpdateProfile} disabled={saving}>
-          {saving ? <ActivityIndicator color="#FFF" /> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Guardar Alterações</Text>}
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity style={{ marginTop: 20, alignItems: 'center' }} onPress={() => navigation.goBack()}>
-        <Text style={{ color: '#E74C3C', fontWeight: 'bold' }}>Voltar ao Dashboard</Text>
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}> Voltar ao Dashboard</Text>
+          </TouchableOpacity>
+          
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

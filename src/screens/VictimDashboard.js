@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-maps';
@@ -16,14 +16,17 @@ export default function VictimDashboard({ navigation }) {
   const [userName, setUserName] = useState('');
   const [showDetailsForm, setShowDetailsForm] = useState(false); 
 
-  // Estados do Formulário SOS
   const [idade, setIdade] = useState('');
   const [estaGravida, setEstaGravida] = useState(false);
   const [temCriancas, setTemCriancas] = useState(false);
 
-  // Estado para controlar o ID do SOS ativo para o Chat
   const [activeSosId, setActiveSosId] = useState(null);
 
+  // Estados para as Notícias
+  const [news, setNews] = useState([]);
+  const [loadingNews, setLoadingNews] = useState(true);
+
+  // 1. Efeito para carregar a Localização e o Nome
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -56,6 +59,56 @@ export default function VictimDashboard({ navigation }) {
     fetchUserName();
   }, []);
 
+  // 2. Efeito: Verifica se a vítima já tem um SOS pendente (Persistência)
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const q = query(
+      collection(db, 'sos_requests'),
+      where('userId', '==', auth.currentUser.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
+      
+      if (pendingRequest) {
+        setActiveSosId(pendingRequest.id);
+      } else {
+        setActiveSosId((prevId) => {
+          if (prevId) {
+            const completedDoc = snapshot.docs.find(doc => doc.id === prevId && doc.data().status === 'concluido');
+            if (completedDoc) {
+              Alert.alert("Resgate Concluído ✅", "A central de operações confirmou que a sua ocorrência foi resolvida. Mantenha-se em segurança.");
+            }
+          }
+          return null; 
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // 3. Efeito: Buscar Últimas Notícias de Portugal com a tua API Key
+  useEffect(() => {
+    const fetchNews = async () => {
+      try {
+        const response = await fetch(`https://newsapi.org/v2/top-headlines?country=pt&apiKey=${process.env.EXPO_PUBLIC_NEWS_API_KEY}`);
+        const data = await response.json();
+        
+        if (data.articles) {
+          setNews(data.articles.slice(0, 3)); // Mostra apenas as 3 mais recentes
+        }
+      } catch (error) {
+        console.log("Erro ao buscar notícias:", error);
+      } finally {
+        setLoadingNews(false);
+      }
+    };
+
+    fetchNews();
+  }, []);
+
   const handleConfirmSOS = async () => {
     if (!location) {
       Alert.alert(Strings.wait, Strings.victim.locationWait);
@@ -65,7 +118,6 @@ export default function VictimDashboard({ navigation }) {
     setIsSending(true);
 
     try {
-      // 1. Cria o documento principal de SOS
       const docRef = await addDoc(collection(db, 'sos_requests'), {
         userId: auth.currentUser ? auth.currentUser.uid : 'anonimo',
         userEmail: auth.currentUser ? auth.currentUser.email : 'N/A',
@@ -81,16 +133,13 @@ export default function VictimDashboard({ navigation }) {
         timestamp: serverTimestamp()
       });
 
-      // 2. Cria a mensagem automática inicial do sistema
       await addDoc(collection(db, 'sos_requests', docRef.id, 'messages'), {
         senderId: 'system',
         senderRole: 'sistema',
-        text: 'O seu pedido de SOS foi recebido. Um operador irá responder em breve. Por favor, mantenha a calma.',
+        text: 'O seu pedido de SOS foi recebido. Um operador irá responder em breve. Por favor, mantenha a calma e permaneça num local seguro.',
         timestamp: serverTimestamp()
       });
 
-      // 3. Ativa o Chat e limpa o formulário
-      setActiveSosId(docRef.id);
       setShowDetailsForm(false);
       setIdade('');
       setEstaGravida(false);
@@ -116,10 +165,8 @@ export default function VictimDashboard({ navigation }) {
           onPress: async () => {
             if (activeSosId) {
               try {
-                // Atualiza o estado na base de dados para 'cancelado'
                 await updateDoc(doc(db, 'sos_requests', activeSosId), { status: 'cancelado' });
-                setActiveSosId(null); // Fecha o chat e volta ao ecrã inicial
-                Alert.alert("Cancelado", "O seu pedido de socorro foi cancelado com sucesso.");
+                Alert.alert("Cancelado", "O seu pedido de socorro foi cancelado.");
               } catch (error) {
                 Alert.alert("Erro", "Não foi possível cancelar o pedido.");
               }
@@ -186,7 +233,7 @@ export default function VictimDashboard({ navigation }) {
             </View>
           )}
 
-          {/* MODO 2: FORMULÁRIO SOS OPCIONAL */}
+          {/* MODO 2: FORMULÁRIO SOS (OPCIONAL) */}
           {showDetailsForm && !activeSosId && (
             <View style={{ backgroundColor: '#f9f9f9', padding: 15, borderRadius: 10, marginBottom: 20 }}>
               <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>Detalhes para o Resgate (Opcional):</Text>
@@ -223,28 +270,58 @@ export default function VictimDashboard({ navigation }) {
 
           {/* MODO 3: CHAT DE EMERGÊNCIA ATIVO */}
           {activeSosId && (
-            <View style={[styles.statusCard, { borderLeftColor: '#E74C3C', height: 320, padding: 0, overflow: 'hidden' }]}>
-              <EmergencyChat 
-                sosId={activeSosId} 
-                currentUserRole="vitima" 
-                currentUserId={auth.currentUser ? auth.currentUser.uid : 'anonimo'} 
-              />
+            <>
+              <View style={[styles.statusCard, { borderLeftColor: '#E74C3C', height: 320, padding: 0, overflow: 'hidden', marginBottom: 10 }]}>
+                <EmergencyChat 
+                  sosId={activeSosId} 
+                  currentUserRole="vitima" 
+                  currentUserId={auth.currentUser ? auth.currentUser.uid : 'anonimo'} 
+                />
+              </View>
+              
+              <TouchableOpacity 
+                style={{ backgroundColor: '#E74C3C', padding: 15, borderRadius: 8, alignItems: 'center', marginBottom: 20 }}
+                onPress={handleCancelSOS}
+              >
+                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Desativar / Cancelar SOS</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* LEITOR DE NOTÍCIAS (Substitui o estado de emergência estático) */}
+          {!showDetailsForm && !activeSosId && (
+            <View style={{ marginBottom: 15 }}>
+              <Text style={{ fontWeight: 'bold', fontSize: 18, color: '#2C3E50', marginBottom: 10, marginLeft: 5 }}>
+                📰 Últimas Notícias
+              </Text>
+              
+              {loadingNews ? (
+                <View style={[styles.statusCard, { alignItems: 'center', padding: 30 }]}>
+                  <ActivityIndicator size="large" color="#4361EE" />
+                  <Text style={{ marginTop: 10, color: '#7F8C8D' }}>A carregar notícias de Portugal...</Text>
+                </View>
+              ) : news.length > 0 ? (
+                news.map((item, index) => (
+                  <View key={index} style={[styles.statusCard, { borderLeftColor: '#4361EE', marginBottom: 10, padding: 15 }]}>
+                    <Text style={styles.statusTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.infoText} numberOfLines={3}>
+                      {item.description || 'Clique para ler os detalhes da notícia. Acompanhe a situação atualizada.'}
+                    </Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+                      <Text style={{ fontSize: 11, color: '#95A5A6', fontWeight: 'bold' }}>
+                        Fonte: {item.source.name}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.statusCard}>
+                  <Text style={styles.infoText}>Não foi possível carregar as notícias neste momento.</Text>
+                </View>
+              )}
             </View>
           )}
 
-          {/* CARTÃO DE ESTADO DE EMERGÊNCIA (Ocultado apenas durante o preenchimento do formulário) */}
-          {!showDetailsForm && (
-            <View style={styles.statusCard}>
-              <Text style={styles.statusTitle}>{Strings.victim.emergencyStateTitle || 'Estado de Emergência: PORTO'}</Text>
-              <Text style={styles.alertText}>{Strings.victim.criticalAlert || '🔥 ALERTA CRÍTICO 🔥'}</Text>
-              <Text style={styles.infoText}>{Strings.victim.fireInfo || 'Incêndio ativo a 12km de distância.'}</Text>
-              <Text style={styles.infoText}>{Strings.victim.followInstructions || 'Siga as instruções das autoridades.'}</Text>
-            </View>
-          )}
-
-          <TouchableOpacity style={styles.logoutButton} onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.logoutButtonText}>{Strings.logout || 'Sair / Voltar ao Login'}</Text>
-          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
