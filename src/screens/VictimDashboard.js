@@ -1,4 +1,3 @@
-import * as Location from 'expo-location';
 import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -26,24 +25,7 @@ export default function VictimDashboard({ navigation }) {
   const [news, setNews] = useState([]);
   const [loadingNews, setLoadingNews] = useState(true);
 
-  // 1. Efeito para carregar a Localização e o Nome
   useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(Strings.permissionDeniedTitle, Strings.victim.locationError);
-        return;
-      }
-      
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation({
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-        latitudeDelta: 0.05, 
-        longitudeDelta: 0.05,
-      });
-    })();
-
     const fetchUserName = async () => {
       if (auth.currentUser) {
         try {
@@ -89,25 +71,6 @@ export default function VictimDashboard({ navigation }) {
     return () => unsubscribe();
   }, []);
 
-  // 3. Efeito: Buscar Últimas Notícias de Portugal com a tua API Key
-  useEffect(() => {
-    const fetchNews = async () => {
-      try {
-        const response = await fetch(`https://newsapi.org/v2/top-headlines?country=pt&apiKey=${process.env.EXPO_PUBLIC_NEWS_API_KEY}`);
-        const data = await response.json();
-        
-        if (data.articles) {
-          setNews(data.articles.slice(0, 3)); // Mostra apenas as 3 mais recentes
-        }
-      } catch (error) {
-        console.log("Erro ao buscar notícias:", error);
-      } finally {
-        setLoadingNews(false);
-      }
-    };
-
-    fetchNews();
-  }, []);
 
   const handleConfirmSOS = async () => {
     if (!location) {
