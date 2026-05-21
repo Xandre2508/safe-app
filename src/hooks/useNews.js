@@ -1,23 +1,37 @@
 import { useEffect, useState } from 'react';
 
-export function useNews() {
+export const useNews = () => {
   const [news, setNews] = useState([]);
   const [loadingNews, setLoadingNews] = useState(true);
 
   useEffect(() => {
     const fetchNews = async () => {
       try {
-        const response = await fetch(`https://newsapi.org/v2/top-headlines?country=pt&apiKey=${process.env.EXPO_PUBLIC_NEWS_API_KEY}`);
+        // A tua chave da NewsAPI
+        const apiKey = process.env.EXPO_PUBLIC_NEWS_API_KEY;
+        
+        // Endpoint para as principais notícias dos EUA (Top Headlines)
+        // Usamos pageSize=5 para não sobrecarregar o ecrã da dashboard
+        const url = `https://newsapi.org/v2/top-headlines?country=us&pageSize=5&apiKey=${apiKey}`;
+
+        const response = await fetch(url);
         const data = await response.json();
-        if (data.articles) setNews(data.articles.slice(0, 3));
+
+        // A NewsAPI devolve o estado do pedido, convém verificar
+        if (data.status === 'ok' && data.articles) {
+          setNews(data.articles);
+        } else {
+          console.error("Erro da API:", data.message);
+        }
       } catch (error) {
-        console.error("Erro ao buscar notícias:", error);
+        console.error("Erro no fetch das notícias:", error);
       } finally {
         setLoadingNews(false);
       }
     };
+
     fetchNews();
   }, []);
 
   return { news, loadingNews };
-}
+};
