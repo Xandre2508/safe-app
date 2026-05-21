@@ -1,17 +1,27 @@
 import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-maps';
 
 import { auth, db } from '../../src/firebaseConfig';
-import EmergencyChat from '../components/EmergencyChat';
 import { Strings } from '../constants/Strings';
 import { styles } from '../styles/VictimDashboardStyles';
 
+// Custom Hooks
+import { useLocation } from '../hooks/useLocation';
+import { useNews } from '../hooks/useNews';
+
+// Componentes da UI (Novos Imports)
+import ActiveEmergencyView from '../components/ActiveEmergencyView';
+import InitialActionButtons from '../components/InitialActionButtons';
+import NewsSection from '../components/NewsSection';
+import SOSDetailsForm from '../components/SOSDetailsForm';
+
 export default function VictimDashboard({ navigation }) {
-  const [location, setLocation] = useState(null);
+  const { location } = useLocation();
+  const { news, loadingNews } = useNews();
+
   const [isSending, setIsSending] = useState(false);
-  
   const [userName, setUserName] = useState('');
   const [showDetailsForm, setShowDetailsForm] = useState(false); 
 
@@ -21,18 +31,12 @@ export default function VictimDashboard({ navigation }) {
 
   const [activeSosId, setActiveSosId] = useState(null);
 
-  // Estados para as Notícias
-  const [news, setNews] = useState([]);
-  const [loadingNews, setLoadingNews] = useState(true);
-
   useEffect(() => {
     const fetchUserName = async () => {
       if (auth.currentUser) {
         try {
           const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-          if (userDoc.exists()) {
-            setUserName(userDoc.data().nome);
-          }
+          if (userDoc.exists()) setUserName(userDoc.data().nome);
         } catch (error) {
           console.log("Erro ao buscar nome:", error);
         }
@@ -41,27 +45,19 @@ export default function VictimDashboard({ navigation }) {
     fetchUserName();
   }, []);
 
-  // 2. Efeito: Verifica se a vítima já tem um SOS pendente (Persistência)
   useEffect(() => {
     if (!auth.currentUser) return;
-
-    const q = query(
-      collection(db, 'sos_requests'),
-      where('userId', '==', auth.currentUser.uid)
-    );
+    const q = query(collection(db, 'sos_requests'), where('userId', '==', auth.currentUser.uid));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
-      
       if (pendingRequest) {
         setActiveSosId(pendingRequest.id);
       } else {
         setActiveSosId((prevId) => {
           if (prevId) {
             const completedDoc = snapshot.docs.find(doc => doc.id === prevId && doc.data().status === 'concluido');
-            if (completedDoc) {
-              Alert.alert("Resgate Concluído ✅", "A central de operações confirmou que a sua ocorrência foi resolvida. Mantenha-se em segurança.");
-            }
+            if (completedDoc) Alert.alert("Resgate Concluído ✅", "A ocorrência foi resolvida. Mantenha-se em segurança.");
           }
           return null; 
         });
@@ -71,13 +67,8 @@ export default function VictimDashboard({ navigation }) {
     return () => unsubscribe();
   }, []);
 
-
   const handleConfirmSOS = async () => {
-    if (!location) {
-      Alert.alert(Strings.wait, Strings.victim.locationWait);
-      return;
-    }
-    
+    if (!location) return Alert.alert(Strings.wait, Strings.victim.locationWait);
     setIsSending(true);
 
     try {
@@ -88,26 +79,18 @@ export default function VictimDashboard({ navigation }) {
         latitude: location.latitude,
         longitude: location.longitude,
         status: 'pendente',
-        detalhes: {
-          idade: idade || 'Não informada',
-          gravida: estaGravida,
-          criancas: temCriancas,
-        },
+        detalhes: { idade: idade || 'Não informada', gravida: estaGravida, criancas: temCriancas },
         timestamp: serverTimestamp()
       });
 
       await addDoc(collection(db, 'sos_requests', docRef.id, 'messages'), {
-        senderId: 'system',
-        senderRole: 'sistema',
-        text: 'O seu pedido de SOS foi recebido. Um operador irá responder em breve. Por favor, mantenha a calma e permaneça num local seguro.',
+        senderId: 'system', senderRole: 'sistema',
+        text: 'O seu pedido de SOS foi recebido. Um operador irá responder em breve.',
         timestamp: serverTimestamp()
       });
 
       setShowDetailsForm(false);
-      setIdade('');
-      setEstaGravida(false);
-      setTemCriancas(false);
-
+      setIdade(''); setEstaGravida(false); setTemCriancas(false);
       Alert.alert(Strings.victim.sosSentTitle, Strings.victim.sosSentMessage);
 
     } catch (error) {
@@ -118,171 +101,61 @@ export default function VictimDashboard({ navigation }) {
   };
 
   const handleCancelSOS = () => {
-    Alert.alert(
-      "Cancelar Emergência",
-      "Tem a certeza que já se encontra em segurança e deseja cancelar este pedido de SOS?",
-      [
-        { text: "Não", style: "cancel" },
-        {
-          text: "Sim, Cancelar",
-          onPress: async () => {
-            if (activeSosId) {
-              try {
-                await updateDoc(doc(db, 'sos_requests', activeSosId), { status: 'cancelado' });
-                Alert.alert("Cancelado", "O seu pedido de socorro foi cancelado.");
-              } catch (error) {
-                Alert.alert("Erro", "Não foi possível cancelar o pedido.");
-              }
+    Alert.alert("Cancelar Emergência", "Deseja cancelar este pedido de SOS?", [
+      { text: "Não", style: "cancel" },
+      { text: "Sim, Cancelar", onPress: async () => {
+          if (activeSosId) {
+            try {
+              await updateDoc(doc(db, 'sos_requests', activeSosId), { status: 'cancelado' });
+              Alert.alert("Cancelado", "O seu pedido de socorro foi cancelado.");
+            } catch (error) {
+              Alert.alert("Erro", "Não foi possível cancelar o pedido.");
             }
           }
         }
-      ]
-    );
+      }
+    ]);
   };
 
-  const handleApoio = () => {
-    Alert.alert(Strings.victim.supportAlertTitle, Strings.victim.supportAlertMessage);
-  };
+  const handleApoio = () => Alert.alert(Strings.victim.supportAlertTitle, Strings.victim.supportAlertMessage);
 
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* BOTÃO DE PERFIL FLUTUANTE */}
-      <TouchableOpacity 
-        style={{
-          position: 'absolute',
-          top: 45, 
-          left: 15,
-          zIndex: 999,
-          backgroundColor: '#FFFFFF',
-          width: 50,
-          height: 50,
-          borderRadius: 25,
-          justifyContent: 'center',
-          alignItems: 'center',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.3,
-          shadowRadius: 4,
-          elevation: 5,
-        }}
-        onPress={() => navigation.navigate('ProfileScreen')}
-      >
-        <Text style={{ fontSize: 24 }}>👤</Text>
+      <TouchableOpacity style={styles.profileButton} onPress={() => navigation.navigate('ProfileScreen')}>
+        <Text style={styles.profileIcon}>👤</Text>
       </TouchableOpacity>
 
       <View style={styles.mapContainer}>
-        <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />
+        {location && <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />}
       </View>
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={{ flex: 1 }}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           
-          {/* MODO 1: BOTÕES INICIAIS */}
           {!showDetailsForm && !activeSosId && (
-            <View style={styles.buttonRow}>
-              <TouchableOpacity style={[styles.actionButton, styles.btnSOS]} onPress={() => setShowDetailsForm(true)}>
-                <Text style={styles.btnText}>{Strings.victim.btnSOS}</Text>
-                <Text style={styles.btnSubText}>{Strings.victim.btnSOSSub}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={[styles.actionButton, styles.btnApoio]} onPress={handleApoio}>
-                <Text style={styles.btnText}>{Strings.victim.btnSupport}</Text>
-                <Text style={styles.btnSubText}>{Strings.victim.btnSupportSub}</Text>
-              </TouchableOpacity>
-            </View>
+            <InitialActionButtons setShowDetailsForm={setShowDetailsForm} handleApoio={handleApoio} />
           )}
 
-          {/* MODO 2: FORMULÁRIO SOS (OPCIONAL) */}
           {showDetailsForm && !activeSosId && (
-            <View style={{ backgroundColor: '#f9f9f9', padding: 15, borderRadius: 10, marginBottom: 20 }}>
-              <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>Detalhes para o Resgate (Opcional):</Text>
-              
-              <TextInput
-                style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#ccc', marginBottom: 15, padding: 8, borderRadius: 5 }}
-                placeholder="A sua Idade (ex: 35)"
-                keyboardType="numeric"
-                value={idade}
-                onChangeText={setIdade}
-              />
-
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                <Text>Está grávida?</Text>
-                <Switch value={estaGravida} onValueChange={setEstaGravida} />
-              </View>
-
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <Text>Tem crianças consigo?</Text>
-                <Switch value={temCriancas} onValueChange={setTemCriancas} />
-              </View>
-
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <TouchableOpacity style={{ backgroundColor: '#ccc', padding: 15, borderRadius: 10, flex: 0.4, alignItems: 'center' }} onPress={() => setShowDetailsForm(false)}>
-                  <Text style={{ color: '#333', fontWeight: 'bold' }}>Cancelar</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.btnSOS, { padding: 15, borderRadius: 10, flex: 0.55, alignItems: 'center' }]} onPress={handleConfirmSOS} disabled={isSending}>
-                  {isSending ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>CONFIRMAR SOS</Text>}
-                </TouchableOpacity>
-              </View>
-            </View>
+            <SOSDetailsForm 
+              idade={idade} setIdade={setIdade}
+              estaGravida={estaGravida} setEstaGravida={setEstaGravida}
+              temCriancas={temCriancas} setTemCriancas={setTemCriancas}
+              setShowDetailsForm={setShowDetailsForm} handleConfirmSOS={handleConfirmSOS} isSending={isSending}
+            />
           )}
 
-          {/* MODO 3: CHAT DE EMERGÊNCIA ATIVO */}
           {activeSosId && (
-            <>
-              <View style={[styles.statusCard, { borderLeftColor: '#E74C3C', height: 320, padding: 0, overflow: 'hidden', marginBottom: 10 }]}>
-                <EmergencyChat 
-                  sosId={activeSosId} 
-                  currentUserRole="vitima" 
-                  currentUserId={auth.currentUser ? auth.currentUser.uid : 'anonimo'} 
-                />
-              </View>
-              
-              <TouchableOpacity 
-                style={{ backgroundColor: '#E74C3C', padding: 15, borderRadius: 8, alignItems: 'center', marginBottom: 20 }}
-                onPress={handleCancelSOS}
-              >
-                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Desativar / Cancelar SOS</Text>
-              </TouchableOpacity>
-            </>
+            <ActiveEmergencyView 
+              activeSosId={activeSosId} 
+              currentUserId={auth.currentUser ? auth.currentUser.uid : 'anonimo'} 
+              handleCancelSOS={handleCancelSOS} 
+            />
           )}
 
-          {/* LEITOR DE NOTÍCIAS (Substitui o estado de emergência estático) */}
           {!showDetailsForm && !activeSosId && (
-            <View style={{ marginBottom: 15 }}>
-              <Text style={{ fontWeight: 'bold', fontSize: 18, color: '#2C3E50', marginBottom: 10, marginLeft: 5 }}>
-                📰 Últimas Notícias
-              </Text>
-              
-              {loadingNews ? (
-                <View style={[styles.statusCard, { alignItems: 'center', padding: 30 }]}>
-                  <ActivityIndicator size="large" color="#4361EE" />
-                  <Text style={{ marginTop: 10, color: '#7F8C8D' }}>A carregar notícias de Portugal...</Text>
-                </View>
-              ) : news.length > 0 ? (
-                news.map((item, index) => (
-                  <View key={index} style={[styles.statusCard, { borderLeftColor: '#4361EE', marginBottom: 10, padding: 15 }]}>
-                    <Text style={styles.statusTitle} numberOfLines={2}>{item.title}</Text>
-                    <Text style={styles.infoText} numberOfLines={3}>
-                      {item.description || 'Clique para ler os detalhes da notícia. Acompanhe a situação atualizada.'}
-                    </Text>
-                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                      <Text style={{ fontSize: 11, color: '#95A5A6', fontWeight: 'bold' }}>
-                        Fonte: {item.source.name}
-                      </Text>
-                    </View>
-                  </View>
-                ))
-              ) : (
-                <View style={styles.statusCard}>
-                  <Text style={styles.infoText}>Não foi possível carregar as notícias neste momento.</Text>
-                </View>
-              )}
-            </View>
+            <NewsSection news={news} loadingNews={loadingNews} />
           )}
 
         </ScrollView>

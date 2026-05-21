@@ -1,4 +1,3 @@
-import * as Location from 'expo-location';
 import { collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { Alert, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -24,23 +23,6 @@ export default function RescuerDashboard({ navigation }) {
   const [location, setLocation] = useState(null);
   const [activeRequests, setActiveRequests] = useState([]);
   const [currentMission, setCurrentMission] = useState(null);
-
-  useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(Strings.permissionDeniedTitle, Strings.rescuer.locationError);
-        return; 
-      }
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation({
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      });
-    })();
-  }, []);
 
   useEffect(() => {
     if (!location) return;
