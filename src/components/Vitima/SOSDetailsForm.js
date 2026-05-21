@@ -1,5 +1,5 @@
 // src/components/SOSDetailsForm.js
-// Formulário para coletar detalhes adicionais do usuário durante o processo de SOS
+// Formulário para apanhar detalhes adicionais do usuário durante o processo de SOS
 // ESTA MERDA É USADA NO VICTIM DASHBOARD OBG
 
 import { ActivityIndicator, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';

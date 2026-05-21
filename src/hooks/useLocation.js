@@ -1,3 +1,7 @@
+// src/hooks/useLocation.js
+// Hook para obter a localização atual do usuário usando o Expo Location
+
+
 import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';

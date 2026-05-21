@@ -1,3 +1,6 @@
+// src/hooks/useNews.js
+// Hook para captar as últimas notícias da NewsAPI
+
 import { useEffect, useState } from 'react';
 
 export const useNews = () => {
@@ -17,7 +20,7 @@ export const useNews = () => {
         const response = await fetch(url);
         const data = await response.json();
 
-        // A NewsAPI devolve o estado do pedido, convém verificar
+        // A NewsAPI devolve o estado do pedido
         if (data.status === 'ok' && data.articles) {
           setNews(data.articles);
         } else {
