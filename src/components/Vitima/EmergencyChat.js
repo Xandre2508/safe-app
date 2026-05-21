@@ -1,7 +1,11 @@
+// src/components/EmergencyChat.js
+// Componente de chat para comunicação em tempo real entre vítima e operador durante um SOS
+// ESTA MERDA É USADA NO VICTIM DASHBOARD OBG
+
 import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { db } from '../firebaseConfig';
+import { db } from '../../firebaseConfig';
 
 export default function EmergencyChat({ sosId, currentUserRole, currentUserId }) {
   const [chatMessages, setChatMessages] = useState([]);

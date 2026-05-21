@@ -5,10 +5,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../../src/firebaseConfig';
 import { styles } from '../styles/OperatorDashboardStyles';
 
-// Importação doscomponentes filhos
-import IncidentDetails from '../components/OperadorIncidentDetails';
-import IncidentList from '../components/OperadorIncidentList';
-import ProfileButton from '../components/ProfileFloatingButton';
+// Importação dos componentes filhos com as subpastas corretas
+import IncidentDetails from '../components/Operador/OperadorIncidentDetails';
+import IncidentList from '../components/Operador/OperadorIncidentList';
+import ProfileButton from '../components/Perfil_Geral/ProfileFloatingButton';
 
 export default function OperatorDashboard({ navigation }) {
   // --- Estados da Aplicação ---

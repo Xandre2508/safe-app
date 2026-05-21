@@ -1,5 +1,7 @@
+// ESTA MERDA É USADA NO VICTIM DASHBOARD OBG
+
 import { Text, TouchableOpacity, View } from 'react-native';
-import { styles } from '../styles/VictimDashboardStyles';
+import { styles } from '../../styles/VictimDashboardStyles';
 import EmergencyChat from './EmergencyChat';
 
 export default function ActiveEmergencyView({ activeSosId, currentUserId, handleCancelSOS }) {

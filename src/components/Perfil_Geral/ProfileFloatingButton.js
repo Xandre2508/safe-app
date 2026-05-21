@@ -1,3 +1,6 @@
+// src/components/ProfileFloatingButton.js
+// Botão flutuante para acessar o perfil do usuário a partir de qualquer tela
+
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 export default function ProfileFloatingButton({ navigation, top = 15 }) {

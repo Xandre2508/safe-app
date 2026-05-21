@@ -1,5 +1,9 @@
+// src/components/SOSDetailsForm.js
+// Formulário para coletar detalhes adicionais do usuário durante o processo de SOS
+// ESTA MERDA É USADA NO VICTIM DASHBOARD OBG
+
 import { ActivityIndicator, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { styles } from '../styles/VictimDashboardStyles';
+import { styles } from '../../styles/VictimDashboardStyles';
 
 export default function SOSDetailsForm({ 
   idade, setIdade, 

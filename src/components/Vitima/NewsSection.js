@@ -1,5 +1,9 @@
+// src/components/NewsSection.js
+// Componente para exibir as últimas notícias relacionadas com a situação em Portugal 
+// esta merda É USADA NO VICTIM DASHBOARD OBG 
+
 import { ActivityIndicator, Text, View } from 'react-native';
-import { styles } from '../styles/VictimDashboardStyles';
+import { styles } from '../../styles/VictimDashboardStyles';
 
 export default function NewsSection({ news, loadingNews }) {
   return (

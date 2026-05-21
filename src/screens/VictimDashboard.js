@@ -7,15 +7,16 @@ import { auth, db } from '../../src/firebaseConfig';
 import { Strings } from '../constants/Strings';
 import { styles } from '../styles/VictimDashboardStyles';
 
+import ActiveEmergencyView from '../components/Vitima/ActiveEmergencyView';
+import InitialActionButtons from '../components/Vitima/InitialActionButtons';
+import NewsSection from '../components/Vitima/NewsSection';
+import SOSDetailsForm from '../components/Vitima/SOSDetailsForm';
+
 // Custom Hooks
 import { useLocation } from '../hooks/useLocation';
 import { useNews } from '../hooks/useNews';
 
 // Componentes da UI (Novos Imports)
-import ActiveEmergencyView from '../components/ActiveEmergencyView';
-import InitialActionButtons from '../components/InitialActionButtons';
-import NewsSection from '../components/NewsSection';
-import SOSDetailsForm from '../components/SOSDetailsForm';
 
 export default function VictimDashboard({ navigation }) {
   const { location } = useLocation();

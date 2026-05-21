@@ -1,6 +1,10 @@
+// src/components/InitialActionButtons.js
+// Componente para exibir os botões iniciais de ação na tela da vítima, como SOS e pedido de apoio
+// ESTA MERDA É USADA NO VICTIM DASHBOARD OBG
+
 import { Text, TouchableOpacity, View } from 'react-native';
-import { Strings } from '../constants/Strings';
-import { styles } from '../styles/VictimDashboardStyles';
+import { Strings } from '../../constants/Strings';
+import { styles } from '../../styles/VictimDashboardStyles';
 
 export default function InitialActionButtons({ setShowDetailsForm, handleApoio }) {
   return (

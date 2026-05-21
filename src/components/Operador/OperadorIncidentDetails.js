@@ -1,6 +1,10 @@
+// src/components/OperadorIncidentDetails.js
+// Componente para exibir os detalhes de uma ocorrência selecionada pelo operador, incluindo o chat de emergência
+// ESTA MERDA É USADA NO OPERATOR DASHBOARD OBG
+
 import { KeyboardAvoidingView, Platform, Text, TouchableOpacity, View } from 'react-native';
-import { styles } from '../styles/OperatorDashboardStyles';
-import EmergencyChat from './EmergencyChat'; // Ajusta o caminho se necessário
+import { styles } from '../../styles/OperatorDashboardStyles';
+import EmergencyChat from '../Vitima/EmergencyChat'; // Ajusta o caminho se necessário
 
 export default function IncidentDetails({ incident, onBack, currentUserId }) {
   // Garantia de segurança: se o incident for null por algum motivo, não rebenta a app

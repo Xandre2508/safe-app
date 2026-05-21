@@ -1,5 +1,9 @@
+// src/components/OperadorIncidentList.js
+// Componente para exibir a lista de ocorrências para o operador, com detalhes e status em tempo real
+// ESTA MERDA É USADA NO OPERATOR DASHBOARD OBG
+
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { styles } from '../styles/OperatorDashboardStyles';
+import { styles } from '../../styles/OperatorDashboardStyles';
 
 export default function IncidentList({ ocorrencias, pendingCount, onSelectIncident, onExit }) {
   return (
