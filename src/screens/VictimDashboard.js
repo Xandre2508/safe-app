@@ -1,3 +1,4 @@
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'; // NOVO IMPORT DE ÍCONES
 import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -10,6 +11,7 @@ import { styles } from '../styles/VictimDashboardStyles';
 
 // Importação dos Componentes Visuais (Modularização)
 import ActiveEmergencyView from '../components/Vitima/ActiveEmergencyView';
+import EmergencyHistoryView from '../components/Vitima/EmergencyHistoryView';
 import InitialActionButtons from '../components/Vitima/InitialActionButtons';
 import NewsSection from '../components/Vitima/NewsSection';
 import SOSDetailsForm from '../components/Vitima/SOSDetailsForm';
@@ -20,26 +22,22 @@ import { useNews } from '../hooks/useNews';
 
 export default function VictimDashboard({ navigation }) {
   // --- 1. HOOKS EXTERNOS ---
-  const { location } = useLocation(); // Obtém as coordenadas GPS em tempo real
-  const { news, loadingNews } = useNews(); // Obtém as notícias (ex: da GNews API)
+  const { location } = useLocation(); 
+  const { news, loadingNews } = useNews(); 
 
   // --- 2. ESTADOS DA APLICAÇÃO ---
-  // Controlo da Interface
-  const [isSending, setIsSending] = useState(false); // Bloqueia o botão durante o envio para evitar duplicações
-  const [showDetailsForm, setShowDetailsForm] = useState(false); // Alterna entre os botões iniciais e o formulário de SOS
+  const [isSending, setIsSending] = useState(false); 
+  const [showDetailsForm, setShowDetailsForm] = useState(false); 
+  const [showHistory, setShowHistory] = useState(false); 
   
-  // Dados do Utilizador e Emergência
-  const [userName, setUserName] = useState(''); // Guarda o nome do utilizador logado
-  const [activeSosId, setActiveSosId] = useState(null); // Guarda o ID de uma emergência a decorrer (se existir)
+  const [userName, setUserName] = useState(''); 
+  const [activeSosId, setActiveSosId] = useState(null); 
 
-  // Campos do Formulário de Triagem
   const [idade, setIdade] = useState('');
   const [estaGravida, setEstaGravida] = useState(false);
   const [temCriancas, setTemCriancas] = useState(false);
 
   // --- 3. EFEITOS (LIFECYCLE) ---
-
-  // Efeito A: Carregar o nome do utilizador da base de dados ao entrar no ecrã
   useEffect(() => {
     const fetchUserName = async () => {
       if (auth.currentUser) {
@@ -54,58 +52,47 @@ export default function VictimDashboard({ navigation }) {
     fetchUserName();
   }, []);
 
-  // Efeito B: Escuta ativa (Tempo Real) para detetar se o utilizador tem um SOS em curso
   useEffect(() => {
-    if (!auth.currentUser) return; // Segurança: Garante que há um utilizador logado
+    if (!auth.currentUser) return; 
     
-    // Cria uma query para procurar pedidos de SOS pertencentes a este utilizador
     const q = query(collection(db, 'sos_requests'), where('userId', '==', auth.currentUser.uid));
 
-    // onSnapshot cria um 'listener' que reage instantaneamente a mudanças na base de dados
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // Procura se existe algum pedido com o estado 'pendente'
       const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
       
       if (pendingRequest) {
-        // Se existir, guarda o ID para bloquear o ecrã no modo de "Emergência Ativa"
         setActiveSosId(pendingRequest.id);
       } else {
-        // Se não houver pendentes, verifica se um pedido anterior acabou de ser 'concluido' pelos socorristas
         setActiveSosId((prevId) => {
           if (prevId) {
             const completedDoc = snapshot.docs.find(doc => doc.id === prevId && doc.data().status === 'concluido');
             if (completedDoc) Alert.alert("Resgate Concluído ✅", "A ocorrência foi resolvida. Mantenha-se em segurança.");
           }
-          return null; // Liberta o ecrã de emergência
+          return null; 
         });
       }
     });
 
-    // Função de limpeza: remove o listener quando o componente é desmontado
     return () => unsubscribe();
   }, []);
 
   // --- 4. FUNÇÕES DE AÇÃO ---
-
-  // Função para criar e enviar o pedido de SOS para a Firebase
   const handleConfirmSOS = async () => {
-    if (!location) return Alert.alert(Strings.wait, Strings.victim.locationWait); // Impede o envio sem GPS
-    setIsSending(true); // Ativa o "loading" no botão
+    if (!location) return Alert.alert(Strings.wait, Strings.victim.locationWait); 
+    setIsSending(true); 
 
     try {
-      // 1º Passo: Cria o documento principal da ocorrência na coleção 'sos_requests'
       const docRef = await addDoc(collection(db, 'sos_requests'), {
         userId: auth.currentUser ? auth.currentUser.uid : 'anonimo',
         userEmail: auth.currentUser ? auth.currentUser.email : 'N/A',
         userName: userName || 'Utilizador Desconhecido', 
         latitude: location.latitude,
         longitude: location.longitude,
-        status: 'pendente', // Estado inicial da ocorrência
-        detalhes: { idade: idade || 'Não informada', gravida: estaGravida, criancas: temCriancas }, // Triagem
-        timestamp: serverTimestamp() // Hora oficial do servidor da Firebase
+        status: 'pendente', 
+        detalhes: { idade: idade || 'Não informada', gravida: estaGravida, criancas: temCriancas }, 
+        timestamp: serverTimestamp() 
       });
 
-      // 2º Passo: Cria imediatamente a subcoleção de mensagens (Chat) atrelada a este pedido
       await addDoc(collection(db, 'sos_requests', docRef.id, 'messages'), {
         senderId: 'system', 
         senderRole: 'sistema',
@@ -113,7 +100,6 @@ export default function VictimDashboard({ navigation }) {
         timestamp: serverTimestamp()
       });
 
-      // 3º Passo: Limpa o formulário e esconde a vista de submissão
       setShowDetailsForm(false);
       setIdade(''); setEstaGravida(false); setTemCriancas(false);
       Alert.alert(Strings.victim.sosSentTitle, Strings.victim.sosSentMessage);
@@ -121,18 +107,16 @@ export default function VictimDashboard({ navigation }) {
     } catch (error) {
       Alert.alert(Strings.error, Strings.victim.sosError);
     } finally {
-      setIsSending(false); // Desativa o "loading" independentemente de sucesso ou erro
+      setIsSending(false); 
     }
   };
 
-  // Função para cancelar o pedido de SOS atual
   const handleCancelSOS = () => {
     Alert.alert("Cancelar Emergência", "Deseja cancelar este pedido de SOS?", [
       { text: "Não", style: "cancel" },
       { text: "Sim, Cancelar", onPress: async () => {
           if (activeSosId) {
             try {
-              // Apenas altera o estado do documento para 'cancelado' (não o apaga para manter histórico)
               await updateDoc(doc(db, 'sos_requests', activeSosId), { status: 'cancelado' });
               Alert.alert("Cancelado", "O seu pedido de socorro foi cancelado.");
             } catch (error) {
@@ -144,56 +128,130 @@ export default function VictimDashboard({ navigation }) {
     ]);
   };
 
-  // Botão de apoio geral (função placeholder)
   const handleApoio = () => Alert.alert(Strings.victim.supportAlertTitle, Strings.victim.supportAlertMessage);
 
   // --- 5. RENDERIZAÇÃO DA INTERFACE (UI) ---
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* Botão de navegação para o perfil */}
-      <TouchableOpacity style={styles.profileButton} onPress={() => navigation.navigate('ProfileScreen')}>
-        <Text style={styles.profileIcon}>👤</Text>
-      </TouchableOpacity>
+      {/* Botão de Perfil Profissional (Canto Superior Esquerdo) */}
+      <View style={{ position: 'absolute', top: 50, left: 20, zIndex: 10 }}>
+        <TouchableOpacity 
+          style={{
+            backgroundColor: '#FFFFFF',
+            width: 50,
+            height: 50,
+            borderRadius: 25, // Faz ser um círculo perfeito
+            justifyContent: 'center',
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15,
+            shadowRadius: 5,
+            elevation: 4
+          }} 
+          onPress={() => navigation.navigate('ProfileScreen')}
+        >
+          <Ionicons name="person" size={24} color="#4B5563" />
+        </TouchableOpacity>
+      </View>
 
-      {/* Renderização do Mapa Condicional (Só mostra quando o GPS carregar) */}
       <View style={styles.mapContainer}>
         {location && <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />}
       </View>
 
-      {/* KeyboardAvoidingView empurra a interface para cima para o teclado não tapar os inputs */}
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           
-          {/* LÓGICA DE CONDICIONAMENTO DE VISTAS (O que mostrar e quando?) */}
+          {/* VISTA 1: Ecrã Principal (Botões Iniciais + Histórico + Notícias) */}
+          {!showDetailsForm && !activeSosId && !showHistory && (
+            <View>
+              <InitialActionButtons setShowDetailsForm={setShowDetailsForm} handleApoio={handleApoio} />
+              
+              {/* Botão de Histórico Centrado e Profissional */}
+              <TouchableOpacity 
+                style={{ 
+                  backgroundColor: '#FFFFFF', 
+                  paddingVertical: 16, 
+                  paddingHorizontal: 20, 
+                  borderRadius: 14, 
+                  alignSelf: 'center', 
+                  marginTop: 10,
+                  marginBottom: 20,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  width: '90%', 
+                  justifyContent: 'center',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
+                  elevation: 3,
+                  borderWidth: 1,
+                  borderColor: '#F3F4F6'
+                }}
+                onPress={() => setShowHistory(true)}
+              >
+                <MaterialCommunityIcons name="clipboard-text-clock-outline" size={26} color="#3B82F6" style={{ marginRight: 10 }} />
+                <Text style={{ fontSize: 16, fontWeight: '700', color: '#1F2937' }}>
+                  Histórico de Alertas
+                </Text>
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#9CA3AF" style={{ position: 'absolute', right: 15 }} />
+              </TouchableOpacity>
 
-          {/* VISTA 1: Estado Normal - Mostra apenas os botões de ação (SOS vermelho / Apoio) */}
-          {!showDetailsForm && !activeSosId && (
-            <InitialActionButtons setShowDetailsForm={setShowDetailsForm} handleApoio={handleApoio} />
+              <NewsSection news={news} loadingNews={loadingNews} />
+            </View>
           )}
 
-          {/* VISTA 2: Formulário de Triagem - Mostra quando o utilizador clica em SOS */}
-          {showDetailsForm && !activeSosId && (
+          {/* VISTA 2: Formulário de Triagem SOS */}
+          {showDetailsForm && !activeSosId && !showHistory && (
             <SOSDetailsForm 
               idade={idade} setIdade={setIdade}
               estaGravida={estaGravida} setEstaGravida={setEstaGravida}
               temCriancas={temCriancas} setTemCriancas={setTemCriancas}
-              setShowDetailsForm={setShowDetailsForm} handleConfirmSOS={handleConfirmSOS} isSending={isSending}
+              handleConfirmSOS={handleConfirmSOS}
+              isSending={isSending}
+              setShowDetailsForm={setShowDetailsForm}
             />
           )}
 
-          {/* VISTA 3: Emergência Ativa - Mostra o chat e substitui todo o resto se houver um SOS pendente */}
+          {/* VISTA 3: Emergência Ativa */}
           {activeSosId && (
             <ActiveEmergencyView 
-              activeSosId={activeSosId} 
-              currentUserId={auth.currentUser ? auth.currentUser.uid : 'anonimo'} 
-              handleCancelSOS={handleCancelSOS} 
+              activeSosId={activeSosId}
+              handleCancelSOS={handleCancelSOS}
             />
           )}
 
-          {/* Secção de Notícias - Só é mostrada no Estado Normal (esconde-se durante o form e na emergência) */}
-          {!showDetailsForm && !activeSosId && (
-            <NewsSection news={news} loadingNews={loadingNews} />
+          {/* VISTA 4: Histórico de Alertas */}
+          {showHistory && !activeSosId && (
+            <View>
+               <EmergencyHistoryView />
+               
+               {/* Botão Voltar Profissional */}
+               <TouchableOpacity 
+                 style={{ 
+                   padding: 16, 
+                   alignItems: 'center', 
+                   backgroundColor: '#4B5563', 
+                   borderRadius: 12, 
+                   marginHorizontal: 15,
+                   marginTop: 10,
+                   marginBottom: 25, 
+                   flexDirection: 'row',
+                   justifyContent: 'center',
+                   shadowColor: '#000',
+                   shadowOffset: { width: 0, height: 2 },
+                   shadowOpacity: 0.2,
+                   shadowRadius: 4,
+                   elevation: 3
+                 }}
+                 onPress={() => setShowHistory(false)}
+               >
+                 <Ionicons name="arrow-back" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>Voltar ao Mapa</Text>
+               </TouchableOpacity>
+            </View>
           )}
 
         </ScrollView>
