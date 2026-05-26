@@ -28,7 +28,7 @@ export default function VictimDashboard({ navigation }) {
   const [showDetailsForm, setShowDetailsForm] = useState(false); 
   const [showHistory, setShowHistory] = useState(false); 
   
-  // NOVO: Estado para minimizar o chat e voltar ao ecrã principal
+  // Estado para minimizar o chat e voltar ao ecrã principal
   const [isEmergencyMinimized, setIsEmergencyMinimized] = useState(false);
 
   const [userName, setUserName] = useState(''); 
@@ -92,7 +92,7 @@ export default function VictimDashboard({ navigation }) {
         latitude: location.latitude,
         longitude: location.longitude,
         status: 'pendente', 
-        cancelRequested: false, // NOVO: Flag para o operador saber se a vítima pediu cancelamento
+        cancelRequested: false, // Flag para o operador saber se a vítima pediu cancelamento
         detalhes: { idade: idade || 'Não informada', gravida: estaGravida, criancas: temCriancas }, 
         timestamp: serverTimestamp() 
       });
@@ -115,7 +115,7 @@ export default function VictimDashboard({ navigation }) {
     }
   };
 
-  // MUDANÇA: Agora solicita o cancelamento em vez de cancelar diretamente
+  // Solicita o cancelamento em vez de cancelar diretamente
   const handleCancelSOS = () => {
     Alert.alert(
       "Solicitar Cancelamento", 
@@ -172,30 +172,45 @@ export default function VictimDashboard({ navigation }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           
-          {/* NOVO: BANNER DE SOS ATIVO - Aparece apenas se o chat estiver minimizado */}
-          {activeSosId && isEmergencyMinimized && (
-            <TouchableOpacity 
-              style={{
-                backgroundColor: '#EF4444', padding: 15, borderRadius: 12, marginHorizontal: 15,
-                marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, elevation: 4
-              }}
-              onPress={() => setIsEmergencyMinimized(false)} // Abre o chat novamente
-            >
-              <Ionicons name="warning" size={24} color="#FFF" style={{ marginRight: 10 }} />
-              <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>🚨 SOS ATIVO - ABRIR CHAT</Text>
-            </TouchableOpacity>
-          )}
-
           {/* VISTA 1: Ecrã Principal - Só aparece se NÃO houver SOS ou se estiver MINIMIZADO */}
           {!showDetailsForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
             <View>
+              {/* Botoes SOS e Apoio */}
               <InitialActionButtons setShowDetailsForm={setShowDetailsForm} handleApoio={handleApoio} />
               
+              {/* BANNER DE SOS ATIVO - Reposicionado para baixo dos botões e centrado */}
+              {activeSosId && isEmergencyMinimized && (
+                <TouchableOpacity 
+                  style={{
+                    backgroundColor: '#EF4444', 
+                    padding: 15, 
+                    borderRadius: 12, 
+                    width: '90%',           // Mesma largura que o Histórico de Alertas
+                    alignSelf: 'center',    // Alinhamento centralizado
+                    marginTop: 10,          // Margem superior para afastar dos botões principais
+                    marginBottom: 10,       // Margem inferior para colar ao Histórico de Alertas
+                    flexDirection: 'row', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    shadowColor: '#000', 
+                    shadowOffset: { width: 0, height: 2 }, 
+                    shadowOpacity: 0.2, 
+                    elevation: 4
+                  }}
+                  onPress={() => setIsEmergencyMinimized(false)} // Abre o chat novamente
+                >
+                  <Ionicons name="warning" size={24} color="#FFF" style={{ marginRight: 10 }} />
+                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>🚨 SOS ATIVO - ABRIR CHAT</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Botão Histórico de Alertas */}
               <TouchableOpacity 
                 style={{ 
                   backgroundColor: '#FFFFFF', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 14, 
-                  alignSelf: 'center', marginTop: 10, marginBottom: 20, flexDirection: 'row', alignItems: 'center',
+                  alignSelf: 'center', 
+                  marginTop: activeSosId && isEmergencyMinimized ? 0 : 10, // Diminui o espaço se o banner de SOS estiver ativo
+                  marginBottom: 20, flexDirection: 'row', alignItems: 'center',
                   width: '90%', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
                   shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, borderWidth: 1, borderColor: '#F3F4F6'
                 }}
@@ -220,12 +235,12 @@ export default function VictimDashboard({ navigation }) {
             />
           )}
 
-          {/* VISTA 3: Emergência Ativa (O Chat) - Só aparece se houver SOS e NÃO estiver minimizado */}
+          {/* VISTA 3: Emergência Ativa (O Chat) */}
           {activeSosId && !isEmergencyMinimized && (
             <ActiveEmergencyView 
               activeSosId={activeSosId}
               handleCancelSOS={handleCancelSOS}
-              onMinimize={() => setIsEmergencyMinimized(true)} // Passamos a função de minimizar
+              onMinimize={() => setIsEmergencyMinimized(true)} 
             />
           )}
 
