@@ -19,8 +19,8 @@ export default function ActiveEmergencyView({ activeSosId, currentUserId, handle
       <View style={[styles.statusCard, styles.chatContainer, { marginTop: 5 }]}>
         <EmergencyChat 
           sosId={activeSosId} 
-          currentUserRole="vitima" 
           currentUserId={currentUserId} 
+          currentUserRole="vitima"
         />
       </View>
       

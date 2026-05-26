@@ -239,6 +239,7 @@ export default function VictimDashboard({ navigation }) {
           {activeSosId && !isEmergencyMinimized && (
             <ActiveEmergencyView 
               activeSosId={activeSosId}
+              currentUserId={auth.currentUser?.uid} // Adiciona esta linha!
               handleCancelSOS={handleCancelSOS}
               onMinimize={() => setIsEmergencyMinimized(true)} 
             />
