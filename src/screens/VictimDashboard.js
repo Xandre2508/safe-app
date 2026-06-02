@@ -15,6 +15,8 @@ import EmergencyHistoryView from '../components/Vitima/EmergencyHistoryView';
 import InitialActionButtons from '../components/Vitima/InitialActionButtons';
 import NewsSection from '../components/Vitima/NewsSection';
 import SOSDetailsForm from '../components/Vitima/SOSDetailsForm';
+// NOVO: Importação do formulário de mantimentos
+import MantimentosDetailsForm from '../components/Mantimentos/MantimentosDetailsForm';
 
 // Importação dos Custom Hooks
 import { useLocation } from '../hooks/useLocation';
@@ -27,6 +29,8 @@ export default function VictimDashboard({ navigation }) {
   const [isSending, setIsSending] = useState(false); 
   const [showDetailsForm, setShowDetailsForm] = useState(false); 
   const [showHistory, setShowHistory] = useState(false); 
+  // NOVO: Estado para mostrar o formulário de mantimentos
+  const [showMantimentosForm, setShowMantimentosForm] = useState(false); 
   
   // Estado para minimizar o chat e voltar ao ecrã principal
   const [isEmergencyMinimized, setIsEmergencyMinimized] = useState(false);
@@ -34,9 +38,15 @@ export default function VictimDashboard({ navigation }) {
   const [userName, setUserName] = useState(''); 
   const [activeSosId, setActiveSosId] = useState(null); 
 
+  // Estados do SOS
   const [idade, setIdade] = useState('');
   const [estaGravida, setEstaGravida] = useState(false);
   const [temCriancas, setTemCriancas] = useState(false);
+
+  // NOVO: Estados dos Mantimentos
+  const [descricao, setDescricao] = useState('');
+  const [quantidade, setQuantidade] = useState('');
+  const [urgente, setUrgente] = useState(false);
 
   useEffect(() => {
     const fetchUserName = async () => {
@@ -70,7 +80,7 @@ export default function VictimDashboard({ navigation }) {
         setActiveSosId((prevId) => {
           if (prevId) {
             const completedDoc = snapshot.docs.find(doc => doc.id === prevId && doc.data().status === 'concluido');
-            if (completedDoc) Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantenha-se em segurança.");
+            if (completedDoc) Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
           }
           return null; 
         });
@@ -100,7 +110,7 @@ export default function VictimDashboard({ navigation }) {
       await addDoc(collection(db, 'sos_requests', docRef.id, 'messages'), {
         senderId: 'system', 
         senderRole: 'sistema',
-        text: 'O seu pedido de SOS foi recebido. Um operador irá responder em breve.',
+        text: 'O teu pedido de SOS foi recebido. Um operador irá responder em breve.',
         timestamp: serverTimestamp()
       });
 
@@ -115,11 +125,38 @@ export default function VictimDashboard({ navigation }) {
     }
   };
 
+  // NOVO: Função para confirmar o pedido de mantimentos
+  const handleConfirmMantimentos = async () => {
+    if (!location) return Alert.alert(Strings.wait, Strings.victim.locationWait); 
+    setIsSending(true); 
+
+    try {
+      await addDoc(collection(db, 'pedidos_mantimentos'), {
+        userId: auth.currentUser ? auth.currentUser.uid : 'anonimo',
+        userName: userName || 'Utilizador Desconhecido', 
+        latitude: location.latitude,
+        longitude: location.longitude,
+        status: 'pendente', 
+        detalhes: { descricao: descricao || 'Não informada', quantidade: quantidade || 'Não informada', urgente: urgente }, 
+        timestamp: serverTimestamp() 
+      });
+
+      setShowMantimentosForm(false);
+      setDescricao(''); setQuantidade(''); setUrgente(false);
+      Alert.alert("Pedido Enviado", "O teu pedido de mantimentos foi registado com sucesso.");
+
+    } catch (error) {
+      Alert.alert("Erro", "Erro ao enviar o pedido de mantimentos.");
+    } finally {
+      setIsSending(false); 
+    }
+  };
+
   // Solicita o cancelamento em vez de cancelar diretamente
   const handleCancelSOS = () => {
     Alert.alert(
       "Solicitar Cancelamento", 
-      "Deseja enviar um pedido ao operador para cancelar este SOS? O operador irá confirmar antes de encerrar.", 
+      "Desejas enviar um pedido ao operador para cancelar este SOS? O operador irá confirmar antes de encerrar.", 
       [
         { text: "Voltar", style: "cancel" },
         { text: "Sim, Solicitar", onPress: async () => {
@@ -136,7 +173,7 @@ export default function VictimDashboard({ navigation }) {
                     timestamp: serverTimestamp()
                 });
                 
-                Alert.alert("Pedido Enviado", "O operador foi notificado do seu pedido.");
+                Alert.alert("Pedido Enviado", "O operador foi notificado do teu pedido.");
               } catch (error) {
                 Alert.alert("Erro", "Não foi possível enviar o pedido.");
               }
@@ -146,8 +183,6 @@ export default function VictimDashboard({ navigation }) {
       ]
     );
   };
-
-  const handleApoio = () => Alert.alert(Strings.victim.supportAlertTitle, Strings.victim.supportAlertMessage);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -172,11 +207,11 @@ export default function VictimDashboard({ navigation }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           
-          {/* VISTA 1: Ecrã Principal - Só aparece se NÃO houver SOS ou se estiver MINIMIZADO */}
-          {!showDetailsForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
+          {/* VISTA 1: Ecrã Principal - Só aparece se NÃO houver SOS, Mantimentos ou se estiver MINIMIZADO */}
+          {!showDetailsForm && !showMantimentosForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
             <View>
-              {/* Botoes SOS e Apoio */}
-              <InitialActionButtons setShowDetailsForm={setShowDetailsForm} handleApoio={handleApoio} />
+              {/* Botoes SOS e Apoio - ALTERADO para passar setShowMantimentosForm */}
+              <InitialActionButtons setShowDetailsForm={setShowDetailsForm} setShowMantimentosForm={setShowMantimentosForm} />
               
               {/* BANNER DE SOS ATIVO - Reposicionado para baixo dos botões e centrado */}
               {activeSosId && isEmergencyMinimized && (
@@ -185,7 +220,7 @@ export default function VictimDashboard({ navigation }) {
                     backgroundColor: '#EF4444', 
                     padding: 15, 
                     borderRadius: 12, 
-                    width: '90%',           // Mesma largura que o Histórico de Alertas
+                    width: '90%',          // Mesma largura que o Histórico de Alertas
                     alignSelf: 'center',    // Alinhamento centralizado
                     marginTop: 10,          // Margem superior para afastar dos botões principais
                     marginBottom: 10,       // Margem inferior para colar ao Histórico de Alertas
@@ -232,6 +267,18 @@ export default function VictimDashboard({ navigation }) {
               estaGravida={estaGravida} setEstaGravida={setEstaGravida}
               temCriancas={temCriancas} setTemCriancas={setTemCriancas}
               handleConfirmSOS={handleConfirmSOS} isSending={isSending} setShowDetailsForm={setShowDetailsForm}
+            />
+          )}
+
+          {/* NOVA VISTA 5: Formulário de Mantimentos */}
+          {showMantimentosForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
+            <MantimentosDetailsForm 
+              descricao={descricao} setDescricao={setDescricao}
+              quantidade={quantidade} setQuantidade={setQuantidade}
+              urgente={urgente} setUrgente={setUrgente}
+              handleConfirmMantimentos={handleConfirmMantimentos} 
+              isSending={isSending} 
+              setShowMantimentosForm={setShowMantimentosForm}
             />
           )}
 

@@ -1,82 +1,81 @@
-// src/components/SOSDetailsForm.js
-// Formulário para apanhar detalhes adicionais do usuário durante o processo de SOS
-// ESTA MERDA É USADA NO VICTIM DASHBOARD OBG
+// src/components/Mantimentos/MantimentosDetailsForm.js
+// Formulário para pedir mantimentos
+// ESTA MERDA TAMBÉM VAI SER USADA NO VICTIM DASHBOARD
 
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import React from 'react';
 import { ActivityIndicator, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+// Podes continuar a usar o mesmo ficheiro de estilos para manter o design igual
+import { styles } from '../../styles/VictimDashboardStyles';
 
-export default function SOSDetailsForm({ 
-  idade, setIdade, 
-  estaGravida, setEstaGravida, 
-  temCriancas, setTemCriancas, 
-  setShowDetailsForm, handleConfirmSOS, isSending 
+export default function MantimentosDetailsForm({ 
+  descricao, setDescricao, 
+  quantidade, setQuantidade, 
+  urgente, setUrgente, 
+  setShowMantimentosForm, handleConfirmMantimentos, isSending 
 }) {
   return (
     <View style={localStyles.container}>
       <View style={localStyles.headerContainer}>
-        <Ionicons name="shield-alert-outline" size={24} color="#EF4444" />
-        <Text style={localStyles.title}>Detalhes para o Resgate:</Text>
+        <Ionicons name="cube-outline" size={24} color="#3B82F6" />
+        <Text style={localStyles.title}>Pedido de Mantimentos:</Text>
       </View>
       
-      {/* Campo para a Idade */}
+      {/* Campo para o tipo de mantimento */}
       <View style={localStyles.inputWrapper}>
-        <Ionicons name="person-outline" size={20} color="#9CA3AF" style={localStyles.inputIcon} />
+        <MaterialCommunityIcons name="format-list-bulleted" size={20} color="#9CA3AF" style={localStyles.inputIcon} />
         <TextInput
           style={localStyles.inputArea}
-          placeholder="A sua Idade (ex: 35)"
+          placeholder="O que precisa? (ex: Água, Comida, Cobertores)"
           placeholderTextColor="#9CA3AF"
-          keyboardType="numeric"
-          value={idade}
-          onChangeText={setIdade}
+          value={descricao}
+          onChangeText={setDescricao}
+          multiline
         />
       </View>
 
-      {/* Switch para grávida */}
-      <View style={localStyles.switchRow}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <MaterialCommunityIcons name="baby-carriage" size={20} color={estaGravida ? "#EF4444" : "#6B7280"} />
-          <Text style={[localStyles.switchLabel, estaGravida && { color: '#EF4444', fontWeight: 'bold' }]}>
-            Está grávida?
-          </Text>
-        </View>
-        <Switch 
-          value={estaGravida} 
-          onValueChange={setEstaGravida} 
-          trackColor={{ false: "#D1D5DB", true: "#FCA5A5" }}
-          thumbColor={estaGravida ? "#EF4444" : "#f4f3f4"}
+      {/* Campo para a quantidade */}
+      <View style={localStyles.inputWrapper}>
+        <MaterialCommunityIcons name="counter" size={20} color="#9CA3AF" style={localStyles.inputIcon} />
+        <TextInput
+          style={localStyles.inputArea}
+          placeholder="Quantidade (ex: 5 garrafões, 3 refeições)"
+          placeholderTextColor="#9CA3AF"
+          value={quantidade}
+          onChangeText={setQuantidade}
         />
       </View>
 
-      {/* Switch para crianças */}
+      {/* Switch para marcar como urgente */}
       <View style={localStyles.switchRow}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <MaterialCommunityIcons name="human-child" size={20} color={temCriancas ? "#EF4444" : "#6B7280"} />
-          <Text style={[localStyles.switchLabel, temCriancas && { color: '#EF4444', fontWeight: 'bold' }]}>
-            Tem crianças consigo?
+          <Ionicons name="alert-circle-outline" size={20} color={urgente ? "#EF4444" : "#6B7280"} />
+          <Text style={[localStyles.switchLabel, urgente && { color: '#EF4444', fontWeight: 'bold' }]}>
+            É um pedido urgente?
           </Text>
         </View>
         <Switch 
-          value={temCriancas} 
-          onValueChange={setTemCriancas} 
+          value={urgente} 
+          onValueChange={setUrgente} 
           trackColor={{ false: "#D1D5DB", true: "#FCA5A5" }}
-          thumbColor={temCriancas ? "#EF4444" : "#f4f3f4"}
+          thumbColor={urgente ? "#EF4444" : "#f4f3f4"}
         />
       </View>
 
       <View style={localStyles.buttonRow}>
         {/* Botão de Cancelar */}
-        <TouchableOpacity style={localStyles.btnCancel} onPress={() => setShowDetailsForm(false)}>
+        <TouchableOpacity style={localStyles.btnCancel} onPress={() => setShowMantimentosForm(false)}>
           <Text style={localStyles.btnCancelText}>Cancelar</Text>
         </TouchableOpacity>
 
         {/* Botão de Confirmar */}
-        <TouchableOpacity style={[localStyles.btnConfirm, isSending && { opacity: 0.7 }]} onPress={handleConfirmSOS} disabled={isSending}>
+        <TouchableOpacity style={[localStyles.btnConfirm, isSending && { opacity: 0.7 }]} onPress={handleConfirmMantimentos} disabled={isSending}>
           {isSending ? (
             <ActivityIndicator color="#FFF" />
           ) : (
             <>
-              <Ionicons name="warning-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
-              <Text style={localStyles.btnConfirmText}>CONFIRMAR SOS</Text>
+              <Ionicons name="send" size={18} color="#FFF" style={{ marginRight: 8 }} />
+              <Text style={localStyles.btnConfirmText}>CONFIRMAR PEDIDO</Text>
             </>
           )}
         </TouchableOpacity>
@@ -85,7 +84,7 @@ export default function SOSDetailsForm({
   );
 }
 
-// Estilos locais para unificar o design com o formulário de mantimentos
+// Estilos locais apenas para melhorar a aparência deste formulário
 const localStyles = StyleSheet.create({
   container: {
     backgroundColor: '#FFFFFF',
@@ -140,7 +139,7 @@ const localStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    marginBottom: 15,
+    marginBottom: 20,
   },
   switchLabel: {
     fontSize: 15,
@@ -151,7 +150,6 @@ const localStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12, 
-    marginTop: 5,
   },
   btnCancel: {
     flex: 1,
@@ -167,14 +165,14 @@ const localStyles = StyleSheet.create({
     fontWeight: '600',
   },
   btnConfirm: {
-    flex: 1.6, 
-    backgroundColor: '#EF4444', // Vermelho forte para o SOS
+    flex: 1.5, 
+    backgroundColor: '#3B82F6', 
     paddingVertical: 14,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#EF4444',
+    shadowColor: '#3B82F6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
