@@ -211,7 +211,7 @@ return (
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           /* TRUQUE 2: O paddingBottom no contentContainerStyle cria o espaço extra no fundo */
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 200 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 300 }}
         >
 
           {/* MAPA */}
@@ -280,7 +280,7 @@ return (
                    </ScrollView>
                  </View>
 
-                 {/* BOTÃO DE VOLTAR */}
+                 {/* BOTÃO DE VOLTAR AO MAPA */}
                  <TouchableOpacity style={styles.btnBackHistory} onPress={() => setShowHistory(false)}>
                    <Ionicons name="arrow-back" size={20} color="#FFFFFF" style={styles.btnBackHistoryIcon} />
                    <Text style={styles.btnBackHistoryText}>Voltar ao Mapa</Text>
@@ -289,7 +289,19 @@ return (
               </View>
             )}
 
+            {/* BOTÃO DE SAIR DA CONTA */}
+            {!showHistory && (
+              <TouchableOpacity
+                style={styles.logoutButton}
+                onPress={() => navigation.navigate('Login')}
+              >
+                <Text style={styles.logoutButtonText}>Sair da Conta</Text>
+              </TouchableOpacity>
+            )}
+
           </View>
+          {/* FIM DA BOTTOM SECTION */}
+
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
