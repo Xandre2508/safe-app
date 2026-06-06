@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
+import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Alert, FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
+import * as Notifications from 'expo-notifications'; // NOVO: Motor de Notificações
+
 import { auth, db } from '../../src/firebaseConfig';
 import { styles } from '../styles/OperatorDashboardStyles';
 
@@ -10,6 +12,15 @@ import { styles } from '../styles/OperatorDashboardStyles';
 import IncidentDetails from '../components/Operador/OperadorIncidentDetails';
 import IncidentList from '../components/Operador/OperadorIncidentList';
 import OperatorRescuerChatView from '../components/Operador/OperatorRescuerChatView';
+
+// --- CONFIGURAÇÃO GLOBAL DE NOTIFICAÇÕES ---
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function OperatorDashboard({ navigation }) {
   // --- ESTADOS ---
@@ -19,15 +30,55 @@ export default function OperatorDashboard({ navigation }) {
   const [socorristas, setSocorristas] = useState([]);
   const [selectedRescuer, setSelectedRescuer] = useState(null);
 
+  // --- REFS (Para controlo de Notificações sem causar re-renders) ---
+  const isFirstLoadSOS = useRef(true);
+  const isFirstLoadRadio = useRef(true);
+  const currentTabRef = useRef(activeTab);
+  const currentRescuerRef = useRef(selectedRescuer);
+
+  // Mantém as Refs atualizadas com o estado atual
+  useEffect(() => { currentTabRef.current = activeTab; }, [activeTab]);
+  useEffect(() => { currentRescuerRef.current = selectedRescuer; }, [selectedRescuer]);
+
   // --- MÉTRICAS ---
   const selectedIncident = todasOcorrencias.find(r => r.id === selectedIncidentId);
   const pendingCount = todasOcorrencias.filter(r => r.status === 'pendente').length;
 
-  // --- EFEITO 1: Ocorrências SOS ---
+  // --- EFEITO 1: Pedir Permissões de Notificação ---
+  useEffect(() => {
+    const requestPermissions = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') Alert.alert('Aviso', 'Ativa as notificações para não perderes alertas críticos.');
+    };
+    requestPermissions();
+  }, []);
+
+  // --- EFEITO 2: Ocorrências SOS (Com Gatilho de Notificação) ---
   useFocusEffect(
     useCallback(() => {
       const q = query(collection(db, 'sos_requests'));
       const unsubscribe = onSnapshot(q, (snapshot) => {
+        
+        // 1. Lógica de Notificações (Ignora o load inicial para não fazer spam)
+        if (!isFirstLoadSOS.current) {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const data = change.doc.data();
+              if (data.status === 'pendente') {
+                Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: '🚨 NOVO ALERTA SOS',
+                    body: `Emergência reportada por ${data.userName || 'Vítima'}. Responda imediatamente!`,
+                    sound: true,
+                  },
+                  trigger: null,
+                });
+              }
+            }
+          });
+        }
+
+        // 2. Atualização normal da lista
         let requests = [];
         snapshot.forEach((doc) => requests.push({ id: doc.id, ...doc.data() }));
         requests.sort((a, b) => {
@@ -35,13 +86,17 @@ export default function OperatorDashboard({ navigation }) {
           if (a.status !== 'pendente' && b.status === 'pendente') return 1;
           return 0; 
         });
+        
         setTodasOcorrencias(requests);
+        
+        // Desliga a flag de load inicial
+        if (isFirstLoadSOS.current) isFirstLoadSOS.current = false;
       });
       return () => unsubscribe();
     }, [])
   );
 
-  // --- EFEITO 2: Socorristas ---
+  // --- EFEITO 3: Buscar Socorristas ---
   useEffect(() => {
     const q = query(collection(db, 'users'), where('role', '==', 'socorrista'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -51,6 +106,46 @@ export default function OperatorDashboard({ navigation }) {
     });
     return () => unsubscribe();
   }, []);
+
+  // --- EFEITO 4: Notificações de Rádio (Ouve todos os socorristas ativos) ---
+  useEffect(() => {
+    if (socorristas.length === 0) return;
+
+    // Cria um listener para o chat de cada socorrista
+    const unsubscribes = socorristas.map((socorrista) => {
+      const qMsg = query(collection(db, 'operator_rescuer_chats', socorrista.id, 'messages'), orderBy('timestamp', 'desc'), limit(1));
+      
+      return onSnapshot(qMsg, (snapshot) => {
+        if (!isFirstLoadRadio.current) {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const msgData = change.doc.data();
+              
+              // Só notifica se a mensagem for do socorrista E o operador não estiver a olhar para o chat dele
+              const isLookingAtThisRescuer = currentTabRef.current === 'radio' && currentRescuerRef.current?.id === socorrista.id;
+              
+              if (msgData.senderRole === 'socorrista' && !isLookingAtThisRescuer) {
+                Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: `📻 Rádio: ${socorrista.nome}`,
+                    body: msgData.text,
+                    sound: true,
+                  },
+                  trigger: null,
+                });
+              }
+            }
+          });
+        }
+      });
+    });
+
+    // Timeout ligeiro para garantir que os dados antigos carregaram antes de ativar o gatilho de notificações
+    setTimeout(() => { isFirstLoadRadio.current = false; }, 1000);
+
+    // Limpeza de todos os listeners quando o ecrã for desmontado
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [socorristas]);
 
   // --- ACÕES ---
   const handleLogout = () => {
@@ -63,18 +158,16 @@ export default function OperatorDashboard({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* NAVBAR SUPERIOR FIXA (Escondida se estivermos dentro de um chat para maximizar o ecrã) */}
+      {/* NAVBAR SUPERIOR FIXA */}
       {!selectedIncidentId && !selectedRescuer && (
         <SafeAreaView style={styles.navBarContainer}>
           <View style={styles.navBar}>
             
-            {/* Botão Perfil */}
             <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('ProfileScreen')}>
               <Ionicons name="person-circle-outline" size={28} color="#4B5563" />
               <Text style={styles.navButtonText}>Perfil</Text>
             </TouchableOpacity>
 
-            {/* Abas Centrais (Toggle SOS/Radio) */}
             <View style={styles.navTabContainer}>
               <TouchableOpacity 
                 style={[styles.navTabButton, activeTab === 'sos' && styles.navTabButtonActive]} 
@@ -94,7 +187,6 @@ export default function OperatorDashboard({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* Botão Sair */}
             <TouchableOpacity style={styles.navButton} onPress={handleLogout}>
               <Ionicons name="log-out-outline" size={28} color="#EF4444" />
               <Text style={[styles.navButtonText, { color: '#EF4444' }]}>Sair</Text>
@@ -105,7 +197,6 @@ export default function OperatorDashboard({ navigation }) {
       )}
 
       {/* ÁREA DE CONTEÚDO */}
-      {/* Se não houver nada aberto, aplicamos o padding para não tapar o topo da lista */}
       <View style={(!selectedIncidentId && !selectedRescuer) ? styles.contentPadding : { flex: 1 }}>
         
         {/* ABA: SOS */}
