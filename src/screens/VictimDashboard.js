@@ -184,133 +184,112 @@ export default function VictimDashboard({ navigation }) {
     );
   };
 
-  return (
+return (
     <SafeAreaView style={styles.container}>
-      
+
+      {/* Botão de Perfil Flutuante (Fixo no ecrã) */}
       <View style={{ position: 'absolute', top: 50, left: 20, zIndex: 10 }}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={{
             backgroundColor: '#FFFFFF', width: 50, height: 50, borderRadius: 25,
             justifyContent: 'center', alignItems: 'center', shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 5, elevation: 4
-          }} 
+          }}
           onPress={() => navigation.navigate('ProfileScreen')}
         >
           <Ionicons name="person" size={24} color="#4B5563" />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.mapContainer}>
-        {location && <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />}
-      </View>
+      {/* TRUQUE 1: Usar undefined no Android e adicionar keyboardVerticalOffset para o iOS */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+      >
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          /* TRUQUE 2: O paddingBottom no contentContainerStyle cria o espaço extra no fundo */
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 200 }}
+        >
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          
-          {/* VISTA 1: Ecrã Principal - Só aparece se NÃO houver SOS, Mantimentos ou se estiver MINIMIZADO */}
-          {!showDetailsForm && !showMantimentosForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
-            <View>
-              {/* Botoes SOS e Apoio - ALTERADO para passar setShowMantimentosForm */}
-              <InitialActionButtons setShowDetailsForm={setShowDetailsForm} setShowMantimentosForm={setShowMantimentosForm} />
-              
-              {/* BANNER DE SOS ATIVO - Reposicionado para baixo dos botões e centrado */}
-              {activeSosId && isEmergencyMinimized && (
-                <TouchableOpacity 
-                  style={{
-                    backgroundColor: '#EF4444', 
-                    padding: 15, 
-                    borderRadius: 12, 
-                    width: '90%',          // Mesma largura que o Histórico de Alertas
-                    alignSelf: 'center',    // Alinhamento centralizado
-                    marginTop: 10,          // Margem superior para afastar dos botões principais
-                    marginBottom: 10,       // Margem inferior para colar ao Histórico de Alertas
-                    flexDirection: 'row', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    shadowColor: '#000', 
-                    shadowOffset: { width: 0, height: 2 }, 
-                    shadowOpacity: 0.2, 
-                    elevation: 4
-                  }}
-                  onPress={() => setIsEmergencyMinimized(false)} // Abre o chat novamente
-                >
-                  <Ionicons name="warning" size={24} color="#FFF" style={{ marginRight: 10 }} />
-                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>🚨 SOS ATIVO - ABRIR CHAT</Text>
+          {/* MAPA */}
+          <View style={styles.mapContainer}>
+            {location && (
+              <MapView
+                style={styles.map}
+                showsUserLocation={true}
+                showsMyLocationButton={true}
+                region={location}
+              />
+            )}
+          </View>
+
+          {/* CONTEÚDO INFERIOR */}
+          <View style={styles.bottomSection}>
+
+            {/* VISTA 1: Ecrã Principal */}
+            {!showDetailsForm && !showMantimentosForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
+              <View>
+                <InitialActionButtons setShowDetailsForm={setShowDetailsForm} setShowMantimentosForm={setShowMantimentosForm} />
+
+                {activeSosId && isEmergencyMinimized && (
+                  <TouchableOpacity style={{ backgroundColor: '#EF4444', padding: 15, borderRadius: 12, width: '90%', alignSelf: 'center', marginTop: 10, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, elevation: 4 }} onPress={() => setIsEmergencyMinimized(false)}>
+                    <Ionicons name="warning" size={24} color="#FFF" style={{ marginRight: 10 }} />
+                    <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>🚨 SOS ATIVO - ABRIR CHAT</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity style={{ backgroundColor: '#FFFFFF', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 14, alignSelf: 'center', marginTop: activeSosId && isEmergencyMinimized ? 0 : 10, marginBottom: 20, flexDirection: 'row', alignItems: 'center', width: '90%', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, borderWidth: 1, borderColor: '#F3F4F6' }} onPress={() => setShowHistory(true)}>
+                  <MaterialCommunityIcons name="clipboard-text-clock-outline" size={26} color="#3B82F6" style={{ marginRight: 10 }} />
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1F2937' }}>Histórico de Alertas</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={24} color="#9CA3AF" style={{ position: 'absolute', right: 15 }} />
                 </TouchableOpacity>
-              )}
 
-              {/* Botão Histórico de Alertas */}
-              <TouchableOpacity 
-                style={{ 
-                  backgroundColor: '#FFFFFF', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 14, 
-                  alignSelf: 'center', 
-                  marginTop: activeSosId && isEmergencyMinimized ? 0 : 10, // Diminui o espaço se o banner de SOS estiver ativo
-                  marginBottom: 20, flexDirection: 'row', alignItems: 'center',
-                  width: '90%', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, borderWidth: 1, borderColor: '#F3F4F6'
-                }}
-                onPress={() => setShowHistory(true)}
-              >
-                <MaterialCommunityIcons name="clipboard-text-clock-outline" size={26} color="#3B82F6" style={{ marginRight: 10 }} />
-                <Text style={{ fontSize: 16, fontWeight: '700', color: '#1F2937' }}>Histórico de Alertas</Text>
-                <MaterialCommunityIcons name="chevron-right" size={24} color="#9CA3AF" style={{ position: 'absolute', right: 15 }} />
-              </TouchableOpacity>
+                <NewsSection news={news} loadingNews={loadingNews} />
+              </View>
+            )}
 
-              <NewsSection news={news} loadingNews={loadingNews} />
-            </View>
-          )}
+            {/* VISTA 2: Formulário de Triagem SOS */}
+            {showDetailsForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
+              <SOSDetailsForm idade={idade} setIdade={setIdade} estaGravida={estaGravida} setEstaGravida={setEstaGravida} temCriancas={temCriancas} setTemCriancas={setTemCriancas} handleConfirmSOS={handleConfirmSOS} isSending={isSending} setShowDetailsForm={setShowDetailsForm} />
+            )}
 
-          {/* VISTA 2: Formulário de Triagem SOS */}
-          {showDetailsForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
-            <SOSDetailsForm 
-              idade={idade} setIdade={setIdade}
-              estaGravida={estaGravida} setEstaGravida={setEstaGravida}
-              temCriancas={temCriancas} setTemCriancas={setTemCriancas}
-              handleConfirmSOS={handleConfirmSOS} isSending={isSending} setShowDetailsForm={setShowDetailsForm}
-            />
-          )}
+            {/* VISTA 5: Formulário de Mantimentos */}
+            {showMantimentosForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
+              <MantimentosDetailsForm descricao={descricao} setDescricao={setDescricao} quantidade={quantidade} setQuantidade={setQuantidade} urgente={urgente} setUrgente={setUrgente} handleConfirmMantimentos={handleConfirmMantimentos} isSending={isSending} setShowMantimentosForm={setShowMantimentosForm} />
+            )}
 
-          {/* NOVA VISTA 5: Formulário de Mantimentos */}
-          {showMantimentosForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
-            <MantimentosDetailsForm 
-              descricao={descricao} setDescricao={setDescricao}
-              quantidade={quantidade} setQuantidade={setQuantidade}
-              urgente={urgente} setUrgente={setUrgente}
-              handleConfirmMantimentos={handleConfirmMantimentos} 
-              isSending={isSending} 
-              setShowMantimentosForm={setShowMantimentosForm}
-            />
-          )}
+            {/* VISTA 3: Emergência Ativa (O Chat) */}
+            {activeSosId && !isEmergencyMinimized && (
+              <ActiveEmergencyView activeSosId={activeSosId} currentUserId={auth.currentUser?.uid} handleCancelSOS={handleCancelSOS} onMinimize={() => setIsEmergencyMinimized(true)} />
+            )}
 
-          {/* VISTA 3: Emergência Ativa (O Chat) */}
-          {activeSosId && !isEmergencyMinimized && (
-            <ActiveEmergencyView 
-              activeSosId={activeSosId}
-              currentUserId={auth.currentUser?.uid} // Adiciona esta linha!
-              handleCancelSOS={handleCancelSOS}
-              onMinimize={() => setIsEmergencyMinimized(true)} 
-            />
-          )}
+            {/* VISTA 4: Histórico de Alertas */}
+            {showHistory && (!activeSosId || isEmergencyMinimized) && (
+              <View>
 
-          {/* VISTA 4: Histórico de Alertas */}
-          {showHistory && (!activeSosId || isEmergencyMinimized) && (
-            <View>
-               <EmergencyHistoryView />
-               <TouchableOpacity 
-                 style={{ 
-                   padding: 16, alignItems: 'center', backgroundColor: '#4B5563', borderRadius: 12, 
-                   marginHorizontal: 15, marginTop: 10, marginBottom: 25, flexDirection: 'row',
-                   justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-                   shadowOpacity: 0.2, shadowRadius: 4, elevation: 3
-                 }}
-                 onPress={() => setShowHistory(false)}
-               >
-                 <Ionicons name="arrow-back" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>Voltar ao Mapa</Text>
-               </TouchableOpacity>
-            </View>
-          )}
+                 {/* CAIXA DO HISTÓRICO COM SCROLL INTERNO */}
+                 <View style={styles.historyBoxContainer}>
+                   <ScrollView
+                     showsVerticalScrollIndicator={true}
+                     nestedScrollEnabled={true}
+                   >
+                     <EmergencyHistoryView />
+                   </ScrollView>
+                 </View>
 
+                 {/* BOTÃO DE VOLTAR */}
+                 <TouchableOpacity style={styles.btnBackHistory} onPress={() => setShowHistory(false)}>
+                   <Ionicons name="arrow-back" size={20} color="#FFFFFF" style={styles.btnBackHistoryIcon} />
+                   <Text style={styles.btnBackHistoryText}>Voltar ao Mapa</Text>
+                 </TouchableOpacity>
+
+              </View>
+            )}
+
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
