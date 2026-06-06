@@ -226,19 +226,9 @@ export const styles = StyleSheet.create({
     marginTop: 10, 
     color: '#7F8C8D' 
   },
-  newsCard: { 
-    borderLeftColor: '#4361EE', 
-    marginBottom: 10, 
-    padding: 15 
-  },
-  newsSourceRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'flex-end', 
-    marginTop: 8 
-  },
-  newsSourceText: { 
-    fontSize: 11, 
-    color: '#95A5A6', 
-    fontWeight: 'bold' 
+  newsCard: {
+    borderLeftColor: '#4361EE',
+    marginBottom: 10,
+    padding: 15
   }
 });
