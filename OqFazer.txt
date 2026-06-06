@@ -1,18 +1,30 @@
 
 Interface para um Operador 
 
-registo 
-    Removber socorrista ou Vitima 
-    A conta ée craida automaticamente como vitima 
+Admin login
+admin@safe.pt
+adminadmin
 
-Criar um painel de admiñ
+
+--------------------------------------------------------------
+registo - FEITO
+    Remover socorrista ou Vitima 
+    A conta ée craida automaticamente como vitima 
+--------------------------------------------------------------
+
+
+Criar um painel de admin
     -  Serve para criar acc para socorristas e Operadores
     -  Ligados a uma ORG  
     - Add o nome da Org ao perfil
-    
-Fazer esqueceu a sua password 
+
+
+--------------------------------------------------------------
+Fazer esqueceu a sua password - FEITO
+--------------------------------------------------------------
 
 Adicionar perfil para vitima e socorrista 
 
 Trocar de Socorrista para Organizaçao no Registo
 
+ececece

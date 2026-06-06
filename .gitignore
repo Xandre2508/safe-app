@@ -44,3 +44,6 @@ app-example
 
 # firebase de dados config
 firebaseConfig.js
+
+#ApiKey para Noticias 
+.env
