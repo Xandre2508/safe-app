@@ -8,21 +8,25 @@ export const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
   
   mapContainer: {
-    height: '40%',
-    width: '100%',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-    elevation: 5,
-    backgroundColor: '#FFF',
-  },
-  map: { width: '100%', height: '100%' },
-  
-  bottomSection: { padding: 20 },
+      height: '10%', // <-- MUITO IMPORTANTE: Trocado de '40%' para uma altura fixa
+      width: '100%',
+      borderBottomLeftRadius: 20,
+      borderBottomRightRadius: 20,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 5,
+      elevation: 5,
+      backgroundColor: '#FFF',
+
+    },
+    map: { width: '100%', height: '100%' },
+
+    bottomSection: {
+      padding: 20
+      // O 'flex: 1' foi removido daqui pois dentro do ScrollView não é necessário e pode causar bugs
+    },
   
   buttonRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   actionButton: { 
@@ -146,7 +150,7 @@ export const styles = StyleSheet.create({
   // -- Chat de Emergência Ativo --
   chatContainer: { 
     borderLeftColor: '#E74C3C', 
-    height: 340,
+    height: 320, 
     padding: 0, 
     overflow: 'hidden', 
     marginBottom: 10 
@@ -163,49 +167,6 @@ export const styles = StyleSheet.create({
     fontWeight: 'bold', 
     fontSize: 16 
   },
-
-
-  // -- Histórico de Alertas (Box e Botão) --
-    historyBoxContainer: {
-      height: 350,
-      backgroundColor: '#FFFFFF',
-      borderRadius: 16,
-      marginHorizontal: 15,
-      marginTop: 5,
-      padding: 10,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-      borderWidth: 1,
-      borderColor: '#F3F4F6',
-      overflow: 'hidden'
-    },
-    btnBackHistory: {
-      padding: 16,
-      alignItems: 'center',
-      backgroundColor: '#4B5563',
-      borderRadius: 12,
-      marginHorizontal: 15,
-      marginTop: 15,
-      marginBottom: 25,
-      flexDirection: 'row',
-      justifyContent: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 3
-    },
-    btnBackHistoryText: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: '#FFFFFF'
-    },
-    btnBackHistoryIcon: {
-      marginRight: 8
-    },
 
   // -- Secção de Notícias --
   newsSectionContainer: { 
