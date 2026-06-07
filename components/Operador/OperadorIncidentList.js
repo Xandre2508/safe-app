@@ -1,16 +1,23 @@
 // src/components/OperadorIncidentList.js
+// Componente para exibir a lista de ocorrências para o operador, com detalhes e status em tempo real
+// ESTA MERDA É USADA NO OPERATOR DASHBOARD OBG
+
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { styles } from '../../styles/OperatorDashboardStyles';
 
-export default function IncidentList({ ocorrencias, pendingCount, onSelectIncident }) {
+export default function IncidentList({ ocorrencias, pendingCount, onSelectIncident, onExit }) {
   return (
     <>
+      <View style={styles.headerContainer}>
+        <Text style={styles.title}>Central de Operações</Text>
+      </View>
+
       {/* Banner de Notificação de Alerta Crítico */}
       {pendingCount > 0 && (
         <View style={styles.notificationBanner}>
-          <Text style={{ marginRight: 8, fontSize: 16 }}>🔔</Text>
+          <Text style={styles.notificationIcon}>🔔</Text>
           <Text style={styles.notificationText}>
-            Atenção: Existem {pendingCount} pedido(s) a aguardar apoio tático!
+            Atenção: Existem {pendingCount} pedido(s) com o canal de chat em aberto a aguardar apoio tático!
           </Text>
         </View>
       )}
@@ -64,7 +71,7 @@ export default function IncidentList({ ocorrencias, pendingCount, onSelectIncide
               </View>
               
               <View style={styles.coordsContainer}>
-                <Text style={{ marginRight: 4 }}>📍</Text>
+                <Text style={styles.iconCoords}>📍</Text>
                 <Text style={styles.coordsText}>
                   Lat: {req.latitude?.toFixed(4)} | Lon: {req.longitude?.toFixed(4)}
                 </Text>
@@ -79,6 +86,11 @@ export default function IncidentList({ ocorrencias, pendingCount, onSelectIncide
           );
         })}
       </ScrollView>
+
+      {/* Botão de Saída e Encerramento de Sessão */}
+      <TouchableOpacity style={styles.exitButton} onPress={onExit} activeOpacity={0.8}>
+          <Text style={styles.exitButtonText}>Sair da Central</Text>
+      </TouchableOpacity>
     </>
   );
 }

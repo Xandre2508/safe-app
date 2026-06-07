@@ -1,8 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where, orderBy, limit } from 'firebase/firestore'; // NOVO: orderBy e limit
+import { useEffect, useState, useRef } from 'react'; // NOVO: useRef
 import { Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-maps';
+import * as Notifications from 'expo-notifications'; // NOVO: Notificações Push
 
 // Importação das configurações e constantes
 import { auth, db } from '../../src/firebaseConfig';
@@ -15,12 +16,20 @@ import EmergencyHistoryView from '../components/Vitima/EmergencyHistoryView';
 import InitialActionButtons from '../components/Vitima/InitialActionButtons';
 import NewsSection from '../components/Vitima/NewsSection';
 import SOSDetailsForm from '../components/Vitima/SOSDetailsForm';
-// NOVO: Importação do formulário de mantimentos
 import MantimentosDetailsForm from '../components/Mantimentos/MantimentosDetailsForm';
 
 // Importação dos Custom Hooks
 import { useLocation } from '../hooks/useLocation';
 import { useNews } from '../hooks/useNews';
+
+// --- CONFIGURAÇÃO GLOBAL DE NOTIFICAÇÕES ---
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function VictimDashboard({ navigation }) {
   const { location } = useLocation(); 
@@ -29,11 +38,11 @@ export default function VictimDashboard({ navigation }) {
   const [isSending, setIsSending] = useState(false); 
   const [showDetailsForm, setShowDetailsForm] = useState(false); 
   const [showHistory, setShowHistory] = useState(false); 
-  // NOVO: Estado para mostrar o formulário de mantimentos
   const [showMantimentosForm, setShowMantimentosForm] = useState(false); 
   
-  // Estado para minimizar o chat e voltar ao ecrã principal
   const [isEmergencyMinimized, setIsEmergencyMinimized] = useState(false);
+  // NOVO: Ref para as notificações saberem o estado do chat em tempo real sem causar re-renders
+  const isMinimizedRef = useRef(isEmergencyMinimized); 
 
   const [userName, setUserName] = useState(''); 
   const [activeSosId, setActiveSosId] = useState(null); 
@@ -43,11 +52,28 @@ export default function VictimDashboard({ navigation }) {
   const [estaGravida, setEstaGravida] = useState(false);
   const [temCriancas, setTemCriancas] = useState(false);
 
-  // NOVO: Estados dos Mantimentos
+  // Estados dos Mantimentos
   const [descricao, setDescricao] = useState('');
   const [quantidade, setQuantidade] = useState('');
   const [urgente, setUrgente] = useState(false);
 
+  // NOVO 1: Sincroniza o estado Minimizado com a Ref
+  useEffect(() => {
+    isMinimizedRef.current = isEmergencyMinimized;
+  }, [isEmergencyMinimized]);
+
+  // NOVO 2: Pede permissão para Notificações ao abrir a app
+  useEffect(() => {
+    const requestNotificationPermissions = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        console.log("Permissão para notificações não concedida.");
+      }
+    };
+    requestNotificationPermissions();
+  }, []);
+
+  // --- BUSCA NOME DO UTILIZADOR ---
   useEffect(() => {
     const fetchUserName = async () => {
       if (auth.currentUser) {
@@ -62,6 +88,7 @@ export default function VictimDashboard({ navigation }) {
     fetchUserName();
   }, []);
 
+  // --- MOTOR DE ESTADO DE EMERGÊNCIA (Verifica se há um SOS PENDENTE) ---
   useEffect(() => {
     if (!auth.currentUser) return; 
     
@@ -71,7 +98,6 @@ export default function VictimDashboard({ navigation }) {
       const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
       
       if (pendingRequest) {
-        // Se detetar um SOS novo, abre o chat e tira do modo minimizado
         if (pendingRequest.id !== activeSosId) {
             setActiveSosId(pendingRequest.id);
             setIsEmergencyMinimized(false);
@@ -90,6 +116,40 @@ export default function VictimDashboard({ navigation }) {
     return () => unsubscribe();
   }, [activeSosId]);
 
+  // NOVO 3: MOTOR DE NOTIFICAÇÕES (Escuta mensagens da Central)
+  useEffect(() => {
+    if (!activeSosId) return;
+
+    const msgQuery = query(
+      collection(db, 'sos_requests', activeSosId, 'messages'), 
+      orderBy('timestamp', 'desc'), 
+      limit(1)
+    );
+
+    const unsubscribeMessages = onSnapshot(msgQuery, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const msgData = change.doc.data();
+          
+          // Se a mensagem foi enviada pelo Operador E a vítima tem o chat minimizado -> Notifica!
+          if (msgData.senderRole === 'operador' && isMinimizedRef.current) {
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: 'Central de Operações',
+                body: msgData.text,
+                sound: true,
+              },
+              trigger: null, // trigger null significa notificar instantaneamente
+            });
+          }
+        }
+      });
+    });
+
+    return () => unsubscribeMessages();
+  }, [activeSosId]);
+
+  // --- AÇÕES ---
   const handleConfirmSOS = async () => {
     if (!location) return Alert.alert(Strings.wait, Strings.victim.locationWait); 
     setIsSending(true); 
@@ -102,7 +162,7 @@ export default function VictimDashboard({ navigation }) {
         latitude: location.latitude,
         longitude: location.longitude,
         status: 'pendente', 
-        cancelRequested: false, // Flag para o operador saber se a vítima pediu cancelamento
+        cancelRequested: false, 
         detalhes: { idade: idade || 'Não informada', gravida: estaGravida, criancas: temCriancas }, 
         timestamp: serverTimestamp() 
       });
@@ -125,7 +185,6 @@ export default function VictimDashboard({ navigation }) {
     }
   };
 
-  // NOVO: Função para confirmar o pedido de mantimentos
   const handleConfirmMantimentos = async () => {
     if (!location) return Alert.alert(Strings.wait, Strings.victim.locationWait); 
     setIsSending(true); 
@@ -152,7 +211,6 @@ export default function VictimDashboard({ navigation }) {
     }
   };
 
-  // Solicita o cancelamento em vez de cancelar diretamente
   const handleCancelSOS = () => {
     Alert.alert(
       "Solicitar Cancelamento", 
@@ -162,17 +220,13 @@ export default function VictimDashboard({ navigation }) {
         { text: "Sim, Solicitar", onPress: async () => {
             if (activeSosId) {
               try {
-                // 1. Atualiza o documento principal indicando o pedido
                 await updateDoc(doc(db, 'sos_requests', activeSosId), { cancelRequested: true });
-                
-                // 2. Envia uma mensagem visível no chat
                 await addDoc(collection(db, 'sos_requests', activeSosId, 'messages'), {
                     senderId: 'system', 
                     senderRole: 'sistema',
                     text: '⚠️ O utilizador solicitou o cancelamento desta emergência. A aguardar revisão do operador.',
                     timestamp: serverTimestamp()
                 });
-                
                 Alert.alert("Pedido Enviado", "O operador foi notificado do teu pedido.");
               } catch (error) {
                 Alert.alert("Erro", "Não foi possível enviar o pedido.");
@@ -186,7 +240,6 @@ export default function VictimDashboard({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      
       <View style={{ position: 'absolute', top: 50, left: 20, zIndex: 10 }}>
         <TouchableOpacity 
           style={{
@@ -203,48 +256,45 @@ export default function VictimDashboard({ navigation }) {
       <View style={styles.mapContainer}>
         {location && <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />}
       </View>
+      {/* TRUQUE 1: Usar undefined no Android e adicionar keyboardVerticalOffset para o iOS */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+      >
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          /* TRUQUE 2: O paddingBottom no contentContainerStyle cria o espaço extra no fundo */
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 300 }}
+        >
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           
-          {/* VISTA 1: Ecrã Principal - Só aparece se NÃO houver SOS, Mantimentos ou se estiver MINIMIZADO */}
           {!showDetailsForm && !showMantimentosForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
             <View>
-              {/* Botoes SOS e Apoio - ALTERADO para passar setShowMantimentosForm */}
               <InitialActionButtons setShowDetailsForm={setShowDetailsForm} setShowMantimentosForm={setShowMantimentosForm} />
               
-              {/* BANNER DE SOS ATIVO - Reposicionado para baixo dos botões e centrado */}
               {activeSosId && isEmergencyMinimized && (
                 <TouchableOpacity 
                   style={{
-                    backgroundColor: '#EF4444', 
-                    padding: 15, 
-                    borderRadius: 12, 
-                    width: '90%',          // Mesma largura que o Histórico de Alertas
-                    alignSelf: 'center',    // Alinhamento centralizado
-                    marginTop: 10,          // Margem superior para afastar dos botões principais
-                    marginBottom: 10,       // Margem inferior para colar ao Histórico de Alertas
-                    flexDirection: 'row', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    shadowColor: '#000', 
-                    shadowOffset: { width: 0, height: 2 }, 
-                    shadowOpacity: 0.2, 
-                    elevation: 4
+                    backgroundColor: '#EF4444', padding: 15, borderRadius: 12, width: '90%',          
+                    alignSelf: 'center', marginTop: 10, marginBottom: 10, flexDirection: 'row', 
+                    alignItems: 'center', justifyContent: 'center', shadowColor: '#000', 
+                    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, elevation: 4
                   }}
-                  onPress={() => setIsEmergencyMinimized(false)} // Abre o chat novamente
+                  onPress={() => setIsEmergencyMinimized(false)} 
                 >
                   <Ionicons name="warning" size={24} color="#FFF" style={{ marginRight: 10 }} />
                   <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>🚨 SOS ATIVO - ABRIR CHAT</Text>
                 </TouchableOpacity>
               )}
 
-              {/* Botão Histórico de Alertas */}
               <TouchableOpacity 
                 style={{ 
                   backgroundColor: '#FFFFFF', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 14, 
-                  alignSelf: 'center', 
-                  marginTop: activeSosId && isEmergencyMinimized ? 0 : 10, // Diminui o espaço se o banner de SOS estiver ativo
+                  alignSelf: 'center', marginTop: activeSosId && isEmergencyMinimized ? 0 : 10, 
                   marginBottom: 20, flexDirection: 'row', alignItems: 'center',
                   width: '90%', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
                   shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, borderWidth: 1, borderColor: '#F3F4F6'
@@ -260,7 +310,6 @@ export default function VictimDashboard({ navigation }) {
             </View>
           )}
 
-          {/* VISTA 2: Formulário de Triagem SOS */}
           {showDetailsForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
             <SOSDetailsForm 
               idade={idade} setIdade={setIdade}
@@ -270,29 +319,25 @@ export default function VictimDashboard({ navigation }) {
             />
           )}
 
-          {/* NOVA VISTA 5: Formulário de Mantimentos */}
           {showMantimentosForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
             <MantimentosDetailsForm 
               descricao={descricao} setDescricao={setDescricao}
               quantidade={quantidade} setQuantidade={setQuantidade}
               urgente={urgente} setUrgente={setUrgente}
               handleConfirmMantimentos={handleConfirmMantimentos} 
-              isSending={isSending} 
-              setShowMantimentosForm={setShowMantimentosForm}
+              isSending={isSending} setShowMantimentosForm={setShowMantimentosForm}
             />
           )}
 
-          {/* VISTA 3: Emergência Ativa (O Chat) */}
           {activeSosId && !isEmergencyMinimized && (
             <ActiveEmergencyView 
               activeSosId={activeSosId}
-              currentUserId={auth.currentUser?.uid} // Adiciona esta linha!
+              currentUserId={auth.currentUser?.uid} 
               handleCancelSOS={handleCancelSOS}
               onMinimize={() => setIsEmergencyMinimized(true)} 
             />
           )}
 
-          {/* VISTA 4: Histórico de Alertas */}
           {showHistory && (!activeSosId || isEmergencyMinimized) && (
             <View>
                <EmergencyHistoryView />
@@ -310,6 +355,28 @@ export default function VictimDashboard({ navigation }) {
                </TouchableOpacity>
             </View>
           )}
+
+                 {/* BOTÃO DE VOLTAR AO MAPA */}
+                 <TouchableOpacity style={styles.btnBackHistory} onPress={() => setShowHistory(false)}>
+                   <Ionicons name="arrow-back" size={20} color="#FFFFFF" style={styles.btnBackHistoryIcon} />
+                   <Text style={styles.btnBackHistoryText}>Voltar ao Mapa</Text>
+                 </TouchableOpacity>
+
+              </View>
+            )}
+
+            {/* BOTÃO DE SAIR DA CONTA */}
+            {!showHistory && (
+              <TouchableOpacity
+                style={styles.logoutButton}
+                onPress={() => navigation.navigate('Login')}
+              >
+                <Text style={styles.logoutButtonText}>Sair da Conta</Text>
+              </TouchableOpacity>
+            )}
+
+          </View>
+          {/* FIM DA BOTTOM SECTION */}
 
         </ScrollView>
       </KeyboardAvoidingView>

@@ -1,83 +1,258 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { collection, onSnapshot, query } from 'firebase/firestore';
-import { useCallback, useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore';
+import { useCallback, useEffect, useState, useRef } from 'react';
+import { Alert, FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
+import * as Notifications from 'expo-notifications'; // NOVO: Motor de Notificações
+
 import { auth, db } from '../../src/firebaseConfig';
 import { styles } from '../styles/OperatorDashboardStyles';
 
-// Importação dos componentes de apresentação (Presentational Components)
+// Componentes
 import IncidentDetails from '../components/Operador/OperadorIncidentDetails';
 import IncidentList from '../components/Operador/OperadorIncidentList';
-import ProfileButton from '../components/Perfil_Geral/ProfileFloatingButton';
+import OperatorRescuerChatView from '../components/Operador/OperatorRescuerChatView';
+
+// --- CONFIGURAÇÃO GLOBAL DE NOTIFICAÇÕES ---
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function OperatorDashboard({ navigation }) {
-  // --- ESTADOS DA APLICAÇÃO ---
-  const [todasOcorrencias, setTodasOcorrencias] = useState([]); // Array bruto com todos os SOS da BD
-  const [selectedIncidentId, setSelectedIncidentId] = useState(null); // Define que SOS o operador está a inspecionar
+  // --- ESTADOS ---
+  const [activeTab, setActiveTab] = useState('sos'); // 'sos' | 'radio'
+  const [todasOcorrencias, setTodasOcorrencias] = useState([]);
+  const [selectedIncidentId, setSelectedIncidentId] = useState(null);
+  const [socorristas, setSocorristas] = useState([]);
+  const [selectedRescuer, setSelectedRescuer] = useState(null);
 
-  // --- MÉTRICAS DERIVADAS ---
-  // Obtém o objeto inteiro do incidente atual com base no ID selecionado
+  // --- REFS (Para controlo de Notificações sem causar re-renders) ---
+  const isFirstLoadSOS = useRef(true);
+  const isFirstLoadRadio = useRef(true);
+  const currentTabRef = useRef(activeTab);
+  const currentRescuerRef = useRef(selectedRescuer);
+
+  // Mantém as Refs atualizadas com o estado atual
+  useEffect(() => { currentTabRef.current = activeTab; }, [activeTab]);
+  useEffect(() => { currentRescuerRef.current = selectedRescuer; }, [selectedRescuer]);
+
+  // --- MÉTRICAS ---
   const selectedIncident = todasOcorrencias.find(r => r.id === selectedIncidentId);
-  // Conta ativamente quantas ocorrências ainda aguardam despacho/resposta
   const pendingCount = todasOcorrencias.filter(r => r.status === 'pendente').length;
 
-  // --- EFEITO: Escuta Ativa (Tempo Real) ---
-  // Utilizamos useFocusEffect em vez de useEffect simples. 
-  // Isto garante que se o Operador navegar para outro ecrã e voltar, a escuta é reativada de forma limpa.
+  // --- EFEITO 1: Pedir Permissões de Notificação ---
+  useEffect(() => {
+    const requestPermissions = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') Alert.alert('Aviso', 'Ativa as notificações para não perderes alertas críticos.');
+    };
+    requestPermissions();
+  }, []);
+
+  // --- EFEITO 2: Ocorrências SOS (Com Gatilho de Notificação) ---
   useFocusEffect(
     useCallback(() => {
-      // Procura toda a coleção 'sos_requests' (Poderás querer adicionar um filtro temporal no futuro)
       const q = query(collection(db, 'sos_requests'));
-      
-      // onSnapshot escuta todas as inserções/alterações e dispara os updates à interface instantaneamente
       const unsubscribe = onSnapshot(q, (snapshot) => {
+        
+        // 1. Lógica de Notificações (Ignora o load inicial para não fazer spam)
+        if (!isFirstLoadSOS.current) {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const data = change.doc.data();
+              if (data.status === 'pendente') {
+                Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: '🚨 NOVO ALERTA SOS',
+                    body: `Emergência reportada por ${data.userName || 'Vítima'}. Responda imediatamente!`,
+                    sound: true,
+                  },
+                  trigger: null,
+                });
+              }
+            }
+          });
+        }
+
+        // 2. Atualização normal da lista
         let requests = [];
         snapshot.forEach((doc) => requests.push({ id: doc.id, ...doc.data() }));
-        
-        // Algoritmo de Ordenação para o Operador
-        // Garante que ocorrências 'pendente' (críticas) forçam sempre o seu lugar no topo da lista
         requests.sort((a, b) => {
           if (a.status === 'pendente' && b.status !== 'pendente') return -1;
           if (a.status !== 'pendente' && b.status === 'pendente') return 1;
-          return 0; // Mantém a ordem original entre os restantes
+          return 0; 
         });
-
+        
         setTodasOcorrencias(requests);
+        
+        // Desliga a flag de load inicial
+        if (isFirstLoadSOS.current) isFirstLoadSOS.current = false;
       });
-
-      // Cleanup: Cancela a escuta da Firebase quando o ecrã perde foco (poupa memória)
       return () => unsubscribe();
     }, [])
   );
 
-  // --- RENDERIZAÇÃO CONDICIONAL ---
-  // A lógica aqui é simples: Se selectedIncidentId for NULL, vemos a Lista. 
-  // Se contiver um ID, escondemos a Lista e vemos a janela do Chat/Mapa (IncidentDetails).
+  // --- EFEITO 3: Buscar Socorristas ---
+  useEffect(() => {
+    const q = query(collection(db, 'users'), where('role', '==', 'socorrista'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let equipa = [];
+      snapshot.forEach(doc => equipa.push({ id: doc.id, ...doc.data() }));
+      setSocorristas(equipa);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // --- EFEITO 4: Notificações de Rádio (Ouve todos os socorristas ativos) ---
+  useEffect(() => {
+    if (socorristas.length === 0) return;
+
+    // Cria um listener para o chat de cada socorrista
+    const unsubscribes = socorristas.map((socorrista) => {
+      const qMsg = query(collection(db, 'operator_rescuer_chats', socorrista.id, 'messages'), orderBy('timestamp', 'desc'), limit(1));
+      
+      return onSnapshot(qMsg, (snapshot) => {
+        if (!isFirstLoadRadio.current) {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const msgData = change.doc.data();
+              
+              // Só notifica se a mensagem for do socorrista E o operador não estiver a olhar para o chat dele
+              const isLookingAtThisRescuer = currentTabRef.current === 'radio' && currentRescuerRef.current?.id === socorrista.id;
+              
+              if (msgData.senderRole === 'socorrista' && !isLookingAtThisRescuer) {
+                Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: `📻 Rádio: ${socorrista.nome}`,
+                    body: msgData.text,
+                    sound: true,
+                  },
+                  trigger: null,
+                });
+              }
+            }
+          });
+        }
+      });
+    });
+
+    // Timeout ligeiro para garantir que os dados antigos carregaram antes de ativar o gatilho de notificações
+    setTimeout(() => { isFirstLoadRadio.current = false; }, 1000);
+
+    // Limpeza de todos os listeners quando o ecrã for desmontado
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [socorristas]);
+
+  // --- ACÕES ---
+  const handleLogout = () => {
+    Alert.alert("Terminar Sessão", "Tens a certeza que queres sair da central?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Sair", style: "destructive", onPress: () => navigation.navigate('Login') }
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* Botão de Perfil: Escondido quando o Operador está dentro de uma ocorrência para maximizar espaço de ecrã */}
-      {!selectedIncidentId && (
-        <ProfileButton onPress={() => navigation.navigate('ProfileScreen')} />
+      {/* NAVBAR SUPERIOR FIXA */}
+      {!selectedIncidentId && !selectedRescuer && (
+        <SafeAreaView style={styles.navBarContainer}>
+          <View style={styles.navBar}>
+            
+            <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('ProfileScreen')}>
+              <Ionicons name="person-circle-outline" size={28} color="#4B5563" />
+              <Text style={styles.navButtonText}>Perfil</Text>
+            </TouchableOpacity>
+
+            <View style={styles.navTabContainer}>
+              <TouchableOpacity 
+                style={[styles.navTabButton, activeTab === 'sos' && styles.navTabButtonActive]} 
+                onPress={() => setActiveTab('sos')}
+              >
+                <Text style={[styles.navTabText, activeTab === 'sos' && styles.navTabTextActive]}>
+                  🚨 SOS ({pendingCount})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.navTabButton, activeTab === 'radio' && styles.navTabButtonActive]} 
+                onPress={() => setActiveTab('radio')}
+              >
+                <Text style={[styles.navTabText, activeTab === 'radio' && styles.navTabTextActive]}>
+                  📻 Rádio
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.navButton} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={28} color="#EF4444" />
+              <Text style={[styles.navButtonText, { color: '#EF4444' }]}>Sair</Text>
+            </TouchableOpacity>
+
+          </View>
+        </SafeAreaView>
       )}
 
-      {!selectedIncidentId ? (
-        // VISTA PRINCIPAL: Lista de Ocorrências
-        <IncidentList 
-          ocorrencias={todasOcorrencias}
-          pendingCount={pendingCount}
-          onSelectIncident={setSelectedIncidentId} // Passamos a função que atualiza o estado para abrir o detalhe
-          onExit={() => navigation.navigate('Login')}
-        />
-      ) : (
-        // VISTA DE DETALHE: Chat e Gestão da Ocorrência Ativa
-        <IncidentDetails 
-          incident={selectedIncident} // Passa os dados pré-processados
-          onBack={() => setSelectedIncidentId(null)} // Função para fechar os detalhes voltando o ID a null
-          currentUserId={auth.currentUser ? auth.currentUser.uid : 'operador_anonimo'}
-        />
-      )}
+      {/* ÁREA DE CONTEÚDO */}
+      <View style={(!selectedIncidentId && !selectedRescuer) ? styles.contentPadding : { flex: 1 }}>
+        
+        {/* ABA: SOS */}
+        {activeTab === 'sos' && (
+          <>
+            {!selectedIncidentId ? (
+              <IncidentList 
+                ocorrencias={todasOcorrencias}
+                pendingCount={pendingCount}
+                onSelectIncident={setSelectedIncidentId} 
+              />
+            ) : (
+              <IncidentDetails 
+                incident={selectedIncident} 
+                onBack={() => setSelectedIncidentId(null)} 
+                currentUserId={auth.currentUser ? auth.currentUser.uid : 'operador_anonimo'}
+              />
+            )}
+          </>
+        )}
 
+        {/* ABA: RÁDIO */}
+        {activeTab === 'radio' && (
+          <>
+            {!selectedRescuer ? (
+              <FlatList
+                data={socorristas}
+                keyExtractor={item => item.id}
+                contentContainerStyle={{ paddingBottom: 20 }}
+                renderItem={({ item }) => (
+                  <View style={styles.rescuerCard}>
+                    <Ionicons name="person-circle" size={40} color="#9CA3AF" />
+                    <View style={styles.rescuerInfo}>
+                      <Text style={styles.rescuerName}>{item.nome}</Text>
+                      <Text style={styles.rescuerStatus}>🟢 Online na Rede</Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.chatIconButton} 
+                      onPress={() => setSelectedRescuer(item)}
+                    >
+                      <Ionicons name="chatbubbles" size={24} color="#3B82F6" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              />
+            ) : (
+              <OperatorRescuerChatView 
+                rescuer={selectedRescuer} 
+                operatorId={auth.currentUser?.uid} 
+                onBack={() => setSelectedRescuer(null)}
+              />
+            )}
+          </>
+        )}
+      </View>
+      
     </SafeAreaView>
   );
 }
