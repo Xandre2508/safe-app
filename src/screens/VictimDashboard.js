@@ -243,7 +243,7 @@ export default function VictimDashboard({ navigation }) {
       setIdade(''); setEstaGravida(false); setTemCriancas(false);
       Alert.alert(Strings.victim.sosSentTitle, Strings.victim.sosSentMessage);
 
-    } catch (error) {
+    } catch (_error) {
       Alert.alert(Strings.error, Strings.victim.sosError);
     } finally {
       setIsSending(false); 
