@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { db } from '../../../src/firebaseConfig'; // Ajusta o path conforme a tua estrutura
+import { useEffect, useState } from 'react'; 
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+import { BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { db } from '../../../src/firebaseConfig'; 
 
 export default function RescuerChatView({ currentUserId }) {
   const [messages, setMessages] = useState([]);
@@ -11,9 +13,10 @@ export default function RescuerChatView({ currentUserId }) {
   useEffect(() => {
     if (!currentUserId) return;
 
-    // Conecta à sala exclusiva deste socorrista
     const messagesRef = collection(db, 'operator_rescuer_chats', currentUserId, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'));
+    
+    // 1. MUDANÇA: 'desc' em vez de 'asc'. A mensagem mais recente vem primeiro.
+    const q = query(messagesRef, orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => ({
@@ -56,20 +59,20 @@ export default function RescuerChatView({ currentUserId }) {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <FlatList
+    <View style={styles.container}>
+      
+      <BottomSheetFlatList
         data={messages}
         keyExtractor={(item) => item.id}
         renderItem={renderMessage}
         contentContainerStyle={styles.messageList}
         showsVerticalScrollIndicator={false}
+        // 2. MUDANÇA: O grande truque dos chats! Vira a lista ao contrário
+        inverted 
       />
       
       <View style={styles.inputContainer}>
-        <TextInput
+        <BottomSheetTextInput
           style={styles.input}
           placeholder="Informa a central..."
           value={newMessage}
@@ -80,7 +83,7 @@ export default function RescuerChatView({ currentUserId }) {
           <Ionicons name="send" size={20} color="#FFF" />
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -92,9 +95,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   messageList: {
-    padding: 15,
-    flexGrow: 1,
-    justifyContent: 'flex-end',
+    paddingHorizontal: 15,
+    // NOTA: Como a lista está invertida, o paddingTop visualmente é o "fundo" do chat!
+    paddingTop: 15, 
+    paddingBottom: 20,
   },
   messageBubble: {
     maxWidth: '80%',
@@ -104,12 +108,12 @@ const styles = StyleSheet.create({
   },
   myMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#3B82F6', // Azul para o socorrista
+    backgroundColor: '#3B82F6',
     borderBottomRightRadius: 0,
   },
   operatorMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#E5E7EB', // Cinza para a central
+    backgroundColor: '#E5E7EB', 
     borderBottomLeftRadius: 0,
   },
   senderLabel: {
@@ -134,6 +138,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     alignItems: 'center',
+    paddingBottom: 15, 
   },
   input: {
     flex: 1,

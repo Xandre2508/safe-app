@@ -77,7 +77,7 @@ export default function VictimDashboard({ navigation }) {
     requestNotificationPermissions();
   }, []);
 
-  useEffect(() => {
+  useEffect(() => {r
     const fetchUserName = async () => {
       if (auth.currentUser) {
         try {
