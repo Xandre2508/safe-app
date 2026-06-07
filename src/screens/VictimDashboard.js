@@ -51,6 +51,11 @@ export default function VictimDashboard({ navigation }) {
 
   const [userName, setUserName] = useState(''); 
   const [activeSosId, setActiveSosId] = useState(null); 
+  const [userName, setUserName] = useState(''); 
+
+  // Refs para ler estado dentro dos listeners
+  const isMinimizedRef = useRef(isEmergencyMinimized); 
+  const activeSosIdRef = useRef(activeSosId);
 
   // Estados do SOS
   const [idade, setIdade] = useState('');
@@ -101,27 +106,33 @@ export default function VictimDashboard({ navigation }) {
     
     const q = query(collection(db, 'sos_requests'), where('userId', '==', auth.currentUser.uid));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
-      
-      if (pendingRequest) {
-        if (pendingRequest.id !== activeSosId) {
-            setActiveSosId(pendingRequest.id);
-            setIsEmergencyMinimized(false);
-        }
-      } else {
-        setActiveSosId((prevId) => {
-          if (prevId) {
-            const completedDoc = snapshot.docs.find(doc => doc.id === prevId && doc.data().status === 'concluido');
-            if (completedDoc) Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
+        
+        if (pendingRequest) {
+          if (pendingRequest.id !== activeSosIdRef.current) {
+              setActiveSosId(pendingRequest.id);
+              setIsEmergencyMinimized(false);
           }
-          return null; 
-        });
+        } else {
+          if (activeSosIdRef.current) {
+            const completedDoc = snapshot.docs.find(doc => doc.id === activeSosIdRef.current && doc.data().status === 'concluido');
+            if (completedDoc) {
+              Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
+            }
+            setActiveSosId(null); 
+          }
+        }
+      },
+      // Tratamento de erro silencioso para evitar "Permission Denied" no logout
+      (error) => {
+        console.log("Listener de SOS interrompido (esperado durante o logout):", error.code);
       }
-    });
+    );
 
     return () => unsubscribe();
-  }, [activeSosId]);
+  }, []); 
 
   // NOVO: MOTOR: MANTIMENTOS ---
   useEffect(() => {
@@ -176,9 +187,13 @@ export default function VictimDashboard({ navigation }) {
               trigger: null,
             });
           }
-        }
-      });
-    });
+        });
+      },
+      // Tratamento de erro silencioso para evitar "Permission Denied" no logout
+      (error) => {
+        console.log("Listener de Mensagens interrompido (esperado durante o logout):", error.code);
+      }
+    );
 
     return () => unsubscribeMessages();
   }, [activeSosId]);
@@ -337,7 +352,7 @@ export default function VictimDashboard({ navigation }) {
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
       >
         <ScrollView 
           showsVerticalScrollIndicator={false} 
@@ -467,8 +482,6 @@ export default function VictimDashboard({ navigation }) {
             </TouchableOpacity>
           )}
 
-        </ScrollView>
-      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
