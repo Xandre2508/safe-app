@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { styles } from '../../styles/VictimDashboardStyles';
-import MantimentosChat from './MantimentosChat'; // Certifica-te que este componente existe
+import MantimentosChat from './MantimentosChat';
 
 export default function ActiveMantimentosView({ activeMantimentosId, currentUserId, handleCancelSOS, onMinimize }) {
   return (
