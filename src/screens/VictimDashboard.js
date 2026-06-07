@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where, orderBy, limit } from 'firebase/firestore'; 
+import { signOut } from 'firebase/auth'; // Importação para o Logout
 import { useEffect, useState, useRef } from 'react'; 
 import { Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-maps';
@@ -44,7 +45,7 @@ export default function VictimDashboard({ navigation }) {
   const [activeSosId, setActiveSosId] = useState(null); 
   const [userName, setUserName] = useState(''); 
 
-  // Refs para ler estado dentro dos listeners do Firebase sem causar re-renders/loops
+  // Refs para ler estado dentro dos listeners
   const isMinimizedRef = useRef(isEmergencyMinimized); 
   const activeSosIdRef = useRef(activeSosId);
 
@@ -58,7 +59,6 @@ export default function VictimDashboard({ navigation }) {
   const [quantidade, setQuantidade] = useState('');
   const [urgente, setUrgente] = useState(false);
 
-  // Sincroniza os estados com as Refs
   useEffect(() => {
     isMinimizedRef.current = isEmergencyMinimized;
   }, [isEmergencyMinimized]);
@@ -67,7 +67,6 @@ export default function VictimDashboard({ navigation }) {
     activeSosIdRef.current = activeSosId;
   }, [activeSosId]);
 
-  // Pede permissão para Notificações ao abrir a app
   useEffect(() => {
     const requestNotificationPermissions = async () => {
       const { status } = await Notifications.requestPermissionsAsync();
@@ -78,7 +77,6 @@ export default function VictimDashboard({ navigation }) {
     requestNotificationPermissions();
   }, []);
 
-  // --- BUSCA NOME DO UTILIZADOR ---
   useEffect(() => {
     const fetchUserName = async () => {
       if (auth.currentUser) {
@@ -99,29 +97,33 @@ export default function VictimDashboard({ navigation }) {
     
     const q = query(collection(db, 'sos_requests'), where('userId', '==', auth.currentUser.uid));
 
-    // O listener agora regista-se apenas UMA VEZ na montagem do componente
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
-      
-      if (pendingRequest) {
-        // Usa a Ref para comparar, evitando o loop do listener
-        if (pendingRequest.id !== activeSosIdRef.current) {
-            setActiveSosId(pendingRequest.id);
-            setIsEmergencyMinimized(false);
-        }
-      } else {
-        if (activeSosIdRef.current) {
-          const completedDoc = snapshot.docs.find(doc => doc.id === activeSosIdRef.current && doc.data().status === 'concluido');
-          if (completedDoc) {
-            Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
+        
+        if (pendingRequest) {
+          if (pendingRequest.id !== activeSosIdRef.current) {
+              setActiveSosId(pendingRequest.id);
+              setIsEmergencyMinimized(false);
           }
-          setActiveSosId(null); 
+        } else {
+          if (activeSosIdRef.current) {
+            const completedDoc = snapshot.docs.find(doc => doc.id === activeSosIdRef.current && doc.data().status === 'concluido');
+            if (completedDoc) {
+              Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
+            }
+            setActiveSosId(null); 
+          }
         }
+      },
+      // Tratamento de erro silencioso para evitar "Permission Denied" no logout
+      (error) => {
+        console.log("Listener de SOS interrompido (esperado durante o logout):", error.code);
       }
-    });
+    );
 
     return () => unsubscribe();
-  }, []); // Array de dependências vazio: não re-subscrevemos o onSnapshot a cada alteração de estado.
+  }, []); 
 
   // --- MOTOR DE NOTIFICAÇÕES (Escuta mensagens da Central) ---
   useEffect(() => {
@@ -133,24 +135,30 @@ export default function VictimDashboard({ navigation }) {
       limit(1)
     );
 
-    const unsubscribeMessages = onSnapshot(msgQuery, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
-          const msgData = change.doc.data();
-          
-          if (msgData.senderRole === 'operador' && isMinimizedRef.current) {
-            Notifications.scheduleNotificationAsync({
-              content: {
-                title: 'Central de Operações',
-                body: msgData.text,
-                sound: true,
-              },
-              trigger: null, 
-            });
+    const unsubscribeMessages = onSnapshot(msgQuery, 
+      (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const msgData = change.doc.data();
+            
+            if (msgData.senderRole === 'operador' && isMinimizedRef.current) {
+              Notifications.scheduleNotificationAsync({
+                content: {
+                  title: 'Central de Operações',
+                  body: msgData.text,
+                  sound: true,
+                },
+                trigger: null, 
+              });
+            }
           }
-        }
-      });
-    });
+        });
+      },
+      // Tratamento de erro silencioso para evitar "Permission Denied" no logout
+      (error) => {
+        console.log("Listener de Mensagens interrompido (esperado durante o logout):", error.code);
+      }
+    );
 
     return () => unsubscribeMessages();
   }, [activeSosId]);
@@ -244,29 +252,47 @@ export default function VictimDashboard({ navigation }) {
     );
   };
 
+  const handleLogout = () => {
+    Alert.alert("Terminar Sessão", "Tens a certeza que pretendes sair da conta?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Sair", onPress: () => {
+          signOut(auth).then(() => {
+            navigation.replace('LoginScreen'); // Verifica se o nome da tua rota de Login é este
+          }).catch(error => {
+            Alert.alert("Erro", "Não foi possível terminar sessão.");
+          });
+      }, style: "destructive" }
+    ]);
+  };
+
+  // Variável para determinar se o chat está ativo e visível no ecrã
+  const isChatOpen = activeSosId && !isEmergencyMinimized;
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={{ position: 'absolute', top: 50, left: 20, zIndex: 10 }}>
-        <TouchableOpacity 
-          style={{
-            backgroundColor: '#FFFFFF', width: 50, height: 50, borderRadius: 25,
-            justifyContent: 'center', alignItems: 'center', shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 5, elevation: 4
-          }} 
-          onPress={() => navigation.navigate('ProfileScreen')}
-        >
-          <Ionicons name="person" size={24} color="#4B5563" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.mapContainer}>
+      
+      {/* MAPA - Encolhe dinamicamente se o chat estiver aberto para dar espaço ao teclado */}
+      <View style={[styles.mapContainer, isChatOpen && { flex: 0, height: 150 }]}>
         {location && <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />}
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+      >
+        <ScrollView 
+          style={styles.bottomSection} 
+          showsVerticalScrollIndicator={false} 
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ 
+            flexGrow: 1, 
+            justifyContent: isChatOpen ? 'center' : 'flex-start',
+            paddingBottom: 100 // Espaço extra no final para a Navbar não tapar o conteúdo
+          }}
+        >
           
-          {!showDetailsForm && !showMantimentosForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
+          {!showDetailsForm && !showMantimentosForm && !isChatOpen && !showHistory && (
             <View>
               <InitialActionButtons setShowDetailsForm={setShowDetailsForm} setShowMantimentosForm={setShowMantimentosForm} />
               
@@ -304,7 +330,7 @@ export default function VictimDashboard({ navigation }) {
             </View>
           )}
 
-          {showDetailsForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
+          {showDetailsForm && !isChatOpen && !showHistory && (
             <SOSDetailsForm 
               idade={idade} setIdade={setIdade}
               estaGravida={estaGravida} setEstaGravida={setEstaGravida}
@@ -313,7 +339,7 @@ export default function VictimDashboard({ navigation }) {
             />
           )}
 
-          {showMantimentosForm && (!activeSosId || isEmergencyMinimized) && !showHistory && (
+          {showMantimentosForm && !isChatOpen && !showHistory && (
             <MantimentosDetailsForm 
               descricao={descricao} setDescricao={setDescricao}
               quantidade={quantidade} setQuantidade={setQuantidade}
@@ -323,16 +349,18 @@ export default function VictimDashboard({ navigation }) {
             />
           )}
 
-          {activeSosId && !isEmergencyMinimized && (
-            <ActiveEmergencyView 
-              activeSosId={activeSosId}
-              currentUserId={auth.currentUser?.uid} 
-              handleCancelSOS={handleCancelSOS}
-              onMinimize={() => setIsEmergencyMinimized(true)} 
-            />
+          {isChatOpen && (
+            <View style={{ flex: 1, width: '100%', justifyContent: 'center' }}>
+              <ActiveEmergencyView 
+                activeSosId={activeSosId}
+                currentUserId={auth.currentUser?.uid} 
+                handleCancelSOS={handleCancelSOS}
+                onMinimize={() => setIsEmergencyMinimized(true)} 
+              />
+            </View>
           )}
 
-          {showHistory && (!activeSosId || isEmergencyMinimized) && (
+          {showHistory && !isChatOpen && (
             <View>
                <EmergencyHistoryView />
                <TouchableOpacity 
@@ -352,6 +380,42 @@ export default function VictimDashboard({ navigation }) {
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* NAVBAR INFERIOR PADRONIZADA (Posição Absoluta) */}
+      <View style={{
+        position: 'absolute', 
+        bottom: 0,
+        width: '100%',
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        paddingTop: 12,
+        paddingBottom: Platform.OS === 'ios' ? 35 : 15, 
+        borderTopWidth: 1,
+        borderTopColor: '#E5E7EB',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.1,
+        elevation: 15,
+        zIndex: 999, 
+      }}>
+        <TouchableOpacity onPress={() => navigation.navigate('ProfileScreen')} style={{ alignItems: 'center' }}>
+            <Ionicons name="person-outline" size={24} color="#6B7280" />
+            <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Perfil</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => {}} style={{ alignItems: 'center' }}>
+            <Ionicons name="shield-checkmark" size={26} color="#EF4444" />
+            <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4, fontWeight: '700' }}>S.A.F.E.</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={handleLogout} style={{ alignItems: 'center' }}>
+            <Ionicons name="log-out-outline" size={24} color="#6B7280" />
+            <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Sair</Text>
+        </TouchableOpacity>
+      </View>
+
     </SafeAreaView>
   );
 }
