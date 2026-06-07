@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-// 1. IMPORTAÇÃO DO BOTÃO ESPECIAL (GorhomTouchableOpacity)
-import BottomSheet, { BottomSheetScrollView, BottomSheetView, TouchableOpacity as GorhomTouchableOpacity } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView, TouchableOpacity as GorhomTouchableOpacity } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { collection, doc, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
@@ -12,7 +11,7 @@ import MapViewDirections from 'react-native-maps-directions';
 import { auth, db } from '../../src/firebaseConfig';
 import { styles } from '../styles/RescuerDashboardStyles';
 
-// O teu componente de chat Rádio
+// Componente de chat Rádio
 import RescuerChatView from '../components/Socorrista/RescuerChatView';
 
 const GOOGLE_MAPS_APIKEY = 'COLA_AQUI_A_TUA_CHAVE_DE_API'; 
@@ -99,31 +98,25 @@ export default function RescuerDashboard({ navigation }) {
   useEffect(() => {
     if (!location) return;
     
-    // Query para SOS e Mantimentos
     const qSOS = query(collection(db, 'sos_requests'), where('status', '==', 'pendente'));
     const qMantimentos = query(collection(db, 'pedidos_mantimentos'), where('status', '==', 'pendente'));
 
-    // Variáveis para guardar as listas temporárias
     let pendingSOS = [];
     let pendingMant = [];
 
-    // Função para juntar, calcular distância, ordenar e definir missão
     const processRequests = () => {
       let combinedRequests = [];
 
-      // Processa SOS
       pendingSOS.forEach((data) => {
         const distance = getDistanceKm(location.latitude, location.longitude, data.latitude, data.longitude);
         if (distance <= 50) combinedRequests.push({ ...data, distance, tipoAlerta: 'SOS' });
       });
 
-      // Processa Mantimentos
       pendingMant.forEach((data) => {
         const distance = getDistanceKm(location.latitude, location.longitude, data.latitude, data.longitude);
         if (distance <= 50) combinedRequests.push({ ...data, distance, tipoAlerta: 'MANTIMENTO' });
       });
 
-      // Ordena por Prioridade -> Depois Distância
       combinedRequests.sort((a, b) => {
         let weightA = a.tipoAlerta === 'SOS' ? getPriorityWeight(a.detalhes) : (a.detalhes?.urgente ? 2 : 4);
         let weightB = b.tipoAlerta === 'SOS' ? getPriorityWeight(b.detalhes) : (b.detalhes?.urgente ? 2 : 4);
@@ -164,9 +157,7 @@ export default function RescuerDashboard({ navigation }) {
       { text: "Cancelar", style: "cancel" },
       { text: "Sim, Concluído", onPress: async () => {
           try {
-            // Verifica de qual coleção veio o alerta para atualizar no sítio certo
             const colecao = currentMission.tipoAlerta === 'MANTIMENTO' ? 'pedidos_mantimentos' : 'sos_requests';
-            
             await updateDoc(doc(db, colecao, currentMission.id), { status: 'concluido' });
           } catch (error) {
             Alert.alert("Erro", "Ocorreu um erro ao tentar concluir a missão.");
@@ -188,7 +179,6 @@ export default function RescuerDashboard({ navigation }) {
     <View style={styles.container}>
       <SafeAreaView style={styles.navBarContainer}>
         <View style={styles.navBar}>
-          {/* Aqui mantemos o botão normal porque está FORA do BottomSheet */}
           <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('ProfileScreen')}>
             <Ionicons name="person-circle-outline" size={28} color="#4B5563" />
             <Text style={styles.navButtonText}>Perfil</Text>
@@ -223,68 +213,65 @@ export default function RescuerDashboard({ navigation }) {
         <View style={styles.loadingMap}><Text>A calibrar GPS...</Text></View>
       )}
 
-      <BottomSheet ref={bottomSheetRef} index={1} snapPoints={snapPoints} style={styles.bottomSheetShadow}>
-        <BottomSheetView style={{ flex: 1 }}>
-          
-          {!showChat ? (
-            <BottomSheetScrollView contentContainerStyle={styles.contentSection} keyboardShouldPersistTaps="handled">
-              <View style={styles.headerButtons}>
-                <View style={[styles.statusBadge, { backgroundColor: activeRequests.length > 0 ? '#EF4444' : '#10B981' }]}>
-                  <Text style={styles.whiteIconText}>⚠️ Alerta de Ativos</Text>
-                  <Text style={styles.countText}>{activeRequests.length} Ocorrências</Text>
-                </View>
+      <BottomSheet 
+        ref={bottomSheetRef} 
+        index={1} 
+        snapPoints={snapPoints} 
+        style={styles.bottomSheetShadow}
+        keyboardBehavior="extend"
+      >
+        {!showChat ? (
+          <BottomSheetScrollView contentContainerStyle={styles.contentSection} keyboardShouldPersistTaps="handled">
+            <View style={styles.headerButtons}>
+              <View style={[styles.statusBadge, { backgroundColor: activeRequests.length > 0 ? '#EF4444' : '#10B981' }]}>
+                <Text style={styles.whiteIconText}>⚠️ Alerta de Ativos</Text>
+                <Text style={styles.countText}>{activeRequests.length} Ocorrências</Text>
               </View>
-
-              <View style={styles.card}>
-                <Text style={styles.sectionTitle}>Missão Ativa {currentMission ? `(${currentMission.tipoAlerta})` : ''}:</Text>
-                {currentMission ? (
-                  <>
-                    <Text style={styles.highlightDistance}>📍 {currentMission.distance.toFixed(1)} km</Text>
-                    <Text style={styles.listItem}>👤 Nome: {currentMission.userName || "N/A"}</Text>
-                    
-                    {currentMission.detalhes && (
-                      <View style={styles.priorityBox}>
-                        <Text style={styles.priorityText}>
-                          🚨 PRIORIDADE: 
-                          {/* 2. CORREÇÃO DA CAIXA DE PRIORIDADE */}
-                          {currentMission.tipoAlerta === 'SOS' 
-                            ? (currentMission.detalhes.criancas ? " CRIANÇAS PRESENTES" : 
-                               currentMission.detalhes.gravida ? " GRÁVIDA" : 
-                               parseInt(currentMission.detalhes.idade) > 65 ? " IDOSO" : " NORMAL")
-                            : (currentMission.detalhes.urgente ? " URGENTE" : " NORMAL")
-                          }
-                        </Text>
-                      </View>
-                    )}
-
-                    {/* 3. BOTÃO ESPECIAL PARA FUNCIONAR NO ANDROID */}
-                    <GorhomTouchableOpacity style={styles.completeButton} onPress={handleCompleteMission}>
-                      <Ionicons name="checkmark-circle" size={20} color="#FFF" style={{ marginRight: 6 }} />
-                      <Text style={styles.completeButtonText}>Marcar Concluído</Text>
-                    </GorhomTouchableOpacity>
-                  </>
-                ) : (
-                  <Text style={styles.listItem}>Nenhuma ocorrência.</Text>
-                )}
-              </View>
-            </BottomSheetScrollView>
-          ) : (
-            <View style={[styles.contentSection, { flex: 1, paddingBottom: 0 }]}>
-              <View style={styles.chatHeader}>
-                
-                {/* BOTÃO ESPECIAL AQUI TAMBÉM */}
-                <GorhomTouchableOpacity onPress={toggleChat} style={styles.backButton}>
-                  <Ionicons name="arrow-back" size={22} color="#1F2937" />
-                  <Text style={styles.backButtonText}>Recolher Rádio</Text>
-                </GorhomTouchableOpacity>
-
-              </View>
-              
-              <RescuerChatView currentUserId={auth.currentUser?.uid} />
             </View>
-          )}
 
-        </BottomSheetView>
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Missão Ativa {currentMission ? `(${currentMission.tipoAlerta})` : ''}:</Text>
+              {currentMission ? (
+                <>
+                  <Text style={styles.highlightDistance}>📍 {currentMission.distance.toFixed(1)} km</Text>
+                  <Text style={styles.listItem}>👤 Nome: {currentMission.userName || "N/A"}</Text>
+                  
+                  {currentMission.detalhes && (
+                    <View style={styles.priorityBox}>
+                      <Text style={styles.priorityText}>
+                        🚨 PRIORIDADE: 
+                        {currentMission.tipoAlerta === 'SOS' 
+                          ? (currentMission.detalhes.criancas ? " CRIANÇAS PRESENTES" : 
+                             currentMission.detalhes.gravida ? " GRÁVIDA" : 
+                             parseInt(currentMission.detalhes.idade) > 65 ? " IDOSO" : " NORMAL")
+                          : (currentMission.detalhes.urgente ? " URGENTE" : " NORMAL")
+                        }
+                      </Text>
+                    </View>
+                  )}
+
+                  <GorhomTouchableOpacity style={styles.completeButton} onPress={handleCompleteMission}>
+                    <Ionicons name="checkmark-circle" size={20} color="#FFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.completeButtonText}>Marcar Concluído</Text>
+                  </GorhomTouchableOpacity>
+                </>
+              ) : (
+                <Text style={styles.listItem}>Nenhuma ocorrência.</Text>
+              )}
+            </View>
+          </BottomSheetScrollView>
+        ) : (
+          <View style={[styles.contentSection, { flex: 1, paddingBottom: 0 }]}>
+            <View style={styles.chatHeader}>
+              <GorhomTouchableOpacity onPress={toggleChat} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={22} color="#1F2937" />
+                <Text style={styles.backButtonText}>Recolher Rádio</Text>
+              </GorhomTouchableOpacity>
+            </View>
+            
+            <RescuerChatView currentUserId={auth.currentUser?.uid} />
+          </View>
+        )}
       </BottomSheet>
     </View>
   );

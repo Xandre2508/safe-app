@@ -11,9 +11,10 @@ export default function OperatorRescuerChatView({ rescuer, operatorId, onBack })
   useEffect(() => {
     if (!rescuer || !rescuer.id) return;
 
-    // Conecta à sala exclusiva DESTE socorrista
     const messagesRef = collection(db, 'operator_rescuer_chats', rescuer.id, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'));
+    
+    // MUDANÇA 1: Usar 'desc' para que as mensagens fiquem prontas para a lista invertida
+    const q = query(messagesRef, orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => ({
@@ -34,7 +35,7 @@ export default function OperatorRescuerChatView({ rescuer, operatorId, onBack })
       await addDoc(messagesRef, {
         text: newMessage,
         senderId: operatorId || 'operador_anonimo',
-        senderRole: 'operador', // Define que quem enviou foi a Central
+        senderRole: 'operador',
         timestamp: serverTimestamp()
       });
       setNewMessage('');
@@ -44,7 +45,6 @@ export default function OperatorRescuerChatView({ rescuer, operatorId, onBack })
   };
 
   const renderMessage = ({ item }) => {
-    // Se a mensagem foi enviada pelo 'operador', aparece à direita. Se foi do socorrista, à esquerda.
     const isMe = item.senderRole === 'operador';
     
     return (
@@ -58,9 +58,12 @@ export default function OperatorRescuerChatView({ rescuer, operatorId, onBack })
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    // MUDANÇA 2: Ajustar o behavior do teclado para funcionar bem no Android ('height') e iOS ('padding')
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       
-      {/* HEADER DO CHAT */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
@@ -69,14 +72,15 @@ export default function OperatorRescuerChatView({ rescuer, operatorId, onBack })
       </View>
 
       <FlatList
+        style={{ flex: 1 }} // MUDANÇA 3: OBRIGATÓRIO! Garante que a lista não empurra o input para fora
         data={messages}
         keyExtractor={(item) => item.id}
         renderItem={renderMessage}
         contentContainerStyle={styles.messageList}
         showsVerticalScrollIndicator={false}
+        inverted // MUDANÇA 4: Inverte a lista para parecer um chat real
       />
       
-      {/* INPUT MENSAGEM */}
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
@@ -98,7 +102,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 15, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   backButton: { marginRight: 15 },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
-  messageList: { padding: 15, flexGrow: 1, justifyContent: 'flex-end' },
+  
+  // MUDANÇA 5: Como a lista está 'inverted', o paddingTop é a margem de baixo (perto do input)
+  messageList: { paddingHorizontal: 15, paddingTop: 15, paddingBottom: 20 },
+  
   messageBubble: { maxWidth: '80%', padding: 12, borderRadius: 15, marginBottom: 10 },
   myMessage: { alignSelf: 'flex-end', backgroundColor: '#34495E', borderBottomRightRadius: 0 },
   rescuerMessage: { alignSelf: 'flex-start', backgroundColor: '#3B82F6', borderBottomLeftRadius: 0 },
@@ -106,7 +113,17 @@ const styles = StyleSheet.create({
   messageText: { fontSize: 15 },
   myMessageText: { color: '#FFF' },
   rescuerMessageText: { color: '#FFF' },
-  inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#E5E7EB', alignItems: 'center', marginBottom: 20 },
+  
+  // MUDANÇA 6: Removido o marginBottom que empurrava a barra para baixo da navegação do Android
+  inputContainer: { 
+    flexDirection: 'row', 
+    padding: 10, 
+    backgroundColor: '#FFF', 
+    borderTopWidth: 1, 
+    borderTopColor: '#E5E7EB', 
+    alignItems: 'center', 
+    paddingBottom: Platform.OS === 'ios' ? 25 : 10 // Proteção para a barra de home do iPhone
+  },
   input: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, fontSize: 15, maxHeight: 100 },
   sendButton: { backgroundColor: '#34495E', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
 });

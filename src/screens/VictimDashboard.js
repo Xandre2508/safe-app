@@ -18,6 +18,7 @@ import InitialActionButtons from '../components/Vitima/InitialActionButtons';
 import NewsSection from '../components/Vitima/NewsSection';
 import SOSDetailsForm from '../components/Vitima/SOSDetailsForm';
 import MantimentosDetailsForm from '../components/Mantimentos/MantimentosDetailsForm';
+import ActiveMantimentosView from '../components/Mantimentos/ActiveMantimentosView';
 
 // Importação dos Custom Hooks
 import { useLocation } from '../hooks/useLocation';
@@ -43,11 +44,16 @@ export default function VictimDashboard({ navigation }) {
   
   const [isEmergencyMinimized, setIsEmergencyMinimized] = useState(false);
   const [activeSosId, setActiveSosId] = useState(null); 
+  
+  // Estado para controlar o chat de mantimentos
+  const [activeMantimentoId, setActiveMantimentoId] = useState(null);
+
   const [userName, setUserName] = useState(''); 
 
-  // Refs para ler estado dentro dos listeners
+  // Refs para ler estado dentro dos listeners sem causar loops
   const isMinimizedRef = useRef(isEmergencyMinimized); 
   const activeSosIdRef = useRef(activeSosId);
+  const activeMantimentoIdRef = useRef(activeMantimentoId); 
 
   // Estados do SOS
   const [idade, setIdade] = useState('');
@@ -57,8 +63,8 @@ export default function VictimDashboard({ navigation }) {
   // Estados dos Mantimentos
   const [descricao, setDescricao] = useState('');
   const [quantidade, setQuantidade] = useState('');
-  const [urgente, setUrgente] = useState(false);
 
+  // Sincronização das refs com os estados
   useEffect(() => {
     isMinimizedRef.current = isEmergencyMinimized;
   }, [isEmergencyMinimized]);
@@ -68,96 +74,90 @@ export default function VictimDashboard({ navigation }) {
   }, [activeSosId]);
 
   useEffect(() => {
+    activeMantimentoIdRef.current = activeMantimentoId;
+  }, [activeMantimentoId]);
+
+  // Permissões de Notificação
+  useEffect(() => {
     const requestNotificationPermissions = async () => {
       const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        console.log("Permissão para notificações não concedida.");
-      }
+      if (status !== 'granted') console.log("Permissão para notificações não concedida.");
     };
     requestNotificationPermissions();
   }, []);
 
-  useEffect(() => {r
+  // Buscar Nome do Utilizador
+  useEffect(() => {
     const fetchUserName = async () => {
       if (auth.currentUser) {
         try {
           const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
           if (userDoc.exists()) setUserName(userDoc.data().nome);
-        } catch (error) {
-          console.log("Erro ao buscar nome:", error);
-        }
+        } catch (error) { console.log("Erro ao buscar nome:", error); }
       }
     };
     fetchUserName();
   }, []);
 
-  // --- MOTOR DE ESTADO DE EMERGÊNCIA (Verifica se há um SOS PENDENTE) ---
+  // --- MOTOR DE ESTADO DE EMERGÊNCIA (SOS) ---
   useEffect(() => {
     if (!auth.currentUser) return; 
-    
     const q = query(collection(db, 'sos_requests'), where('userId', '==', auth.currentUser.uid));
-
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
-        
-        if (pendingRequest) {
-          if (pendingRequest.id !== activeSosIdRef.current) {
-              setActiveSosId(pendingRequest.id);
-              setIsEmergencyMinimized(false);
-          }
-        } else {
-          if (activeSosIdRef.current) {
-            const completedDoc = snapshot.docs.find(doc => doc.id === activeSosIdRef.current && doc.data().status === 'concluido');
-            if (completedDoc) {
-              Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
-            }
-            setActiveSosId(null); 
-          }
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
+      if (pendingRequest) {
+        if (pendingRequest.id !== activeSosIdRef.current) {
+            setActiveSosId(pendingRequest.id);
+            setIsEmergencyMinimized(false);
         }
-      },
-      (error) => {
-        console.log("Listener de SOS interrompido (esperado durante o logout):", error.code);
+      } else {
+        if (activeSosIdRef.current) {
+          const completedDoc = snapshot.docs.find(doc => doc.id === activeSosIdRef.current && doc.data().status === 'concluido');
+          if (completedDoc) Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
+          setActiveSosId(null); 
+        }
       }
-    );
-
+    }, (error) => console.log("Listener de SOS interrompido:", error.code));
     return () => unsubscribe();
   }, []); 
 
-  // --- MOTOR DE NOTIFICAÇÕES (Escuta mensagens da Central) ---
+  // --- MOTOR DE ESTADO DE MANTIMENTOS ---
+  useEffect(() => {
+    if (!auth.currentUser) return; 
+    const q = query(collection(db, 'pedidos_mantimentos'), where('userId', '==', auth.currentUser.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
+      if (pendingRequest) {
+        if (pendingRequest.id !== activeMantimentoIdRef.current) {
+            setActiveMantimentoId(pendingRequest.id);
+            setIsEmergencyMinimized(false);
+        }
+      } else {
+        if (activeMantimentoIdRef.current) {
+          setActiveMantimentoId(null); 
+        }
+      }
+    }, (error) => console.log("Listener de Mantimentos interrompido:", error.code));
+    return () => unsubscribe();
+  }, []);
+
+  // --- MOTOR DE NOTIFICAÇÕES (Escuta mensagens do Operador no SOS) ---
   useEffect(() => {
     if (!activeSosId) return;
-
-    const msgQuery = query(
-      collection(db, 'sos_requests', activeSosId, 'messages'), 
-      orderBy('timestamp', 'desc'), 
-      limit(1)
-    );
-
-    const unsubscribeMessages = onSnapshot(msgQuery, 
-      (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'added') {
-            const msgData = change.doc.data();
-            
-            if (msgData.senderRole === 'operador' && isMinimizedRef.current) {
-              Notifications.scheduleNotificationAsync({
-                content: {
-                  title: 'Central de Operações',
-                  body: msgData.text,
-                  sound: true,
-                },
-                trigger: null, 
-              });
-            }
+    const msgQuery = query(collection(db, 'sos_requests', activeSosId, 'messages'), orderBy('timestamp', 'desc'), limit(1));
+    const unsubscribeMessages = onSnapshot(msgQuery, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const msgData = change.doc.data();
+          if (msgData.senderRole === 'operador' && isMinimizedRef.current) {
+            Notifications.scheduleNotificationAsync({
+              content: { title: 'Central de Operações', body: msgData.text, sound: true },
+              trigger: null, 
+            });
           }
-        });
-      },
-      (error) => {
-        console.log("Listener de Mensagens interrompido (esperado durante o logout):", error.code);
-      }
-    );
-
+        }
+      });
+    }, (error) => console.log("Listener de Mensagens interrompido:", error.code));
     return () => unsubscribeMessages();
   }, [activeSosId]);
 
@@ -165,11 +165,9 @@ export default function VictimDashboard({ navigation }) {
   const handleConfirmSOS = async () => {
     if (!location) return Alert.alert(Strings.wait, Strings.victim.locationWait); 
     setIsSending(true); 
-
     try {
       const docRef = await addDoc(collection(db, 'sos_requests'), {
-        userId: auth.currentUser ? auth.currentUser.uid : 'anonimo',
-        userEmail: auth.currentUser ? auth.currentUser.email : 'N/A',
+        userId: auth.currentUser?.uid || 'anonimo',
         userName: userName || 'Utilizador Desconhecido', 
         latitude: location.latitude,
         longitude: location.longitude,
@@ -178,23 +176,14 @@ export default function VictimDashboard({ navigation }) {
         detalhes: { idade: idade || 'Não informada', gravida: estaGravida, criancas: temCriancas }, 
         timestamp: serverTimestamp() 
       });
-
       await addDoc(collection(db, 'sos_requests', docRef.id, 'messages'), {
-        senderId: 'system', 
-        senderRole: 'sistema',
+        senderId: 'system', senderRole: 'sistema',
         text: 'O teu pedido de SOS foi recebido. Um operador irá responder em breve.',
         timestamp: serverTimestamp()
       });
-
       setShowDetailsForm(false);
-      setIdade(''); setEstaGravida(false); setTemCriancas(false);
       Alert.alert(Strings.victim.sosSentTitle, Strings.victim.sosSentMessage);
-
-    } catch (error) {
-      Alert.alert(Strings.error, Strings.victim.sosError);
-    } finally {
-      setIsSending(false); 
-    }
+    } catch (_error) { Alert.alert(Strings.error, Strings.victim.sosError); } finally { setIsSending(false); }
   };
 
   const handleConfirmMantimentos = async () => {
@@ -202,190 +191,180 @@ export default function VictimDashboard({ navigation }) {
     setIsSending(true); 
 
     try {
-      await addDoc(collection(db, 'pedidos_mantimentos'), {
-        userId: auth.currentUser ? auth.currentUser.uid : 'anonimo',
+      const docRef = await addDoc(collection(db, 'pedidos_mantimentos'), {
+        userId: auth.currentUser?.uid || 'anonimo',
         userName: userName || 'Utilizador Desconhecido', 
         latitude: location.latitude,
         longitude: location.longitude,
         status: 'pendente', 
-        detalhes: { descricao: descricao || 'Não informada', quantidade: quantidade || 'Não informada', urgente: urgente }, 
+        detalhes: { descricao, quantidade }, 
         timestamp: serverTimestamp() 
       });
 
+      // Adicionar a primeira mensagem de sistema para criar a coleção de chat
+      await addDoc(collection(db, 'pedidos_mantimentos', docRef.id, 'messages'), {
+        senderId: 'system', senderRole: 'sistema',
+        text: 'O teu pedido de mantimentos foi recebido pela central.',
+        timestamp: serverTimestamp()
+      });
+
       setShowMantimentosForm(false);
-      setDescricao(''); setQuantidade(''); setUrgente(false);
-      Alert.alert("Pedido Enviado", "O teu pedido de mantimentos foi registado com sucesso.");
+      setDescricao(''); setQuantidade('');
+      Alert.alert("Pedido Enviado", "O teu pedido de mantimentos foi registado.");
 
     } catch (error) {
-      Alert.alert("Erro", "Erro ao enviar o pedido de mantimentos.");
+      console.error("ERRO FIREBASE:", error); 
+      Alert.alert("Erro", "Detalhe: " + error.message); 
     } finally {
       setIsSending(false); 
     }
   };
 
   const handleCancelSOS = () => {
-    Alert.alert(
-      "Solicitar Cancelamento", 
-      "Desejas enviar um pedido ao operador para cancelar este SOS? O operador irá confirmar antes de encerrar.", 
-      [
-        { text: "Voltar", style: "cancel" },
-        { text: "Sim, Solicitar", onPress: async () => {
-            if (activeSosId) {
-              try {
-                await updateDoc(doc(db, 'sos_requests', activeSosId), { cancelRequested: true });
-                await addDoc(collection(db, 'sos_requests', activeSosId, 'messages'), {
-                    senderId: 'system', 
-                    senderRole: 'sistema',
-                    text: '⚠️ O utilizador solicitou o cancelamento desta emergência. A aguardar revisão do operador.',
-                    timestamp: serverTimestamp()
-                });
-                Alert.alert("Pedido Enviado", "O operador foi notificado do teu pedido.");
-              } catch (error) {
-                Alert.alert("Erro", "Não foi possível enviar o pedido.");
-              }
-            }
+    Alert.alert("Solicitar Cancelamento", "Desejas enviar um pedido ao operador para cancelar este SOS?", [
+      { text: "Voltar", style: "cancel" },
+      { text: "Sim", onPress: async () => {
+          if (activeSosId) {
+            try {
+              await updateDoc(doc(db, 'sos_requests', activeSosId), { cancelRequested: true });
+              Alert.alert("Pedido Enviado", "O operador foi notificado.");
+            } catch (_error) { Alert.alert("Erro", "Não foi possível enviar."); }
           }
-        }
-      ]
-    );
-  };
-
-  const handleLogout = () => {
-    Alert.alert("Terminar Sessão", "Tens a certeza que pretendes sair da conta?", [
-      { text: "Cancelar", style: "cancel" },
-      { 
-        text: "Sair", 
-        onPress: () => {
-          signOut(auth).then(() => {
-            navigation.replace('Login'); 
-          }).catch(error => {
-            Alert.alert("Erro", "Não foi possível terminar sessão.");
-          });
-        }, 
-        style: "destructive" 
-      }
+      }}
     ]);
   };
 
-  // Redireciona para o ecrã inicial limpando sub-menus e minimizando o chat se ativo
+  const handleCancelMantimento = () => {
+    Alert.alert("Cancelar Pedido", "Tens a certeza que queres cancelar este pedido de mantimentos?", [
+      { text: "Voltar", style: "cancel" },
+      { text: "Sim", onPress: async () => {
+          if (activeMantimentoId) {
+            try {
+              await updateDoc(doc(db, 'pedidos_mantimentos', activeMantimentoId), { status: 'cancelado' });
+              Alert.alert("Sucesso", "O teu pedido foi cancelado.");
+            } catch (_error) { Alert.alert("Erro", "Não foi possível cancelar."); }
+          }
+      }}
+    ]);
+  };
+
+  const handleLogout = () => {
+    Alert.alert("Terminar Sessão", "Tens a certeza?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Sair", onPress: () => signOut(auth).then(() => navigation.replace('Login')), style: "destructive" }
+    ]);
+  };
+
+  // Função essencial para a Navbar (S.A.F.E. tab)
   const handleGoHome = () => {
     setShowDetailsForm(false);
     setShowMantimentosForm(false);
     setShowHistory(false);
-    if (activeSosId) {
+    if (activeSosId || activeMantimentoId) {
       setIsEmergencyMinimized(true);
     }
   };
 
   // Variável para determinar se o chat está ativo e visível no ecrã
-  const isChatOpen = activeSosId && !isEmergencyMinimized;
+  const isChatOpen = (activeSosId || activeMantimentoId) && !isEmergencyMinimized;
 
   return (
     <SafeAreaView style={styles.container}>
-      
+
       {/* MAPA - Encolhe dinamicamente se o chat estiver aberto para dar espaço ao teclado */}
       <View style={[styles.mapContainer, isChatOpen && { flex: 0, height: 150 }]}>
         {location && <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />}
       </View>
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
-      >
+      {/* ÁREA DE RENDERIZAÇÃO PRINCIPAL (Menus, Chats e Formulários) */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView 
           style={styles.bottomSection} 
           showsVerticalScrollIndicator={false} 
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ 
-            flexGrow: 1, 
-            justifyContent: isChatOpen ? 'center' : 'flex-start',
-            paddingBottom: 100 // Espaço extra para a Navbar absoluta não tapar conteúdo
-          }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 100 }} // O paddingBottom de 100 é o que impede a Navbar de tapar o conteúdo!
         >
           
+          {/* VISTA INICIAL (Sem forms ou chats abertos) */}
           {!showDetailsForm && !showMantimentosForm && !isChatOpen && !showHistory && (
             <View>
               <InitialActionButtons setShowDetailsForm={setShowDetailsForm} setShowMantimentosForm={setShowMantimentosForm} />
               
-              {activeSosId && isEmergencyMinimized && (
+              {/* Botão para maximizar o chat consoante o tipo ativo */}
+              {(activeSosId || activeMantimentoId) && isEmergencyMinimized && (
                 <TouchableOpacity 
-                  style={{
-                    backgroundColor: '#EF4444', padding: 15, borderRadius: 12, width: '90%',          
-                    alignSelf: 'center', marginTop: 10, marginBottom: 10, flexDirection: 'row', 
-                    alignItems: 'center', justifyContent: 'center', shadowColor: '#000', 
-                    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, elevation: 4
-                  }}
-                  onPress={() => setIsEmergencyMinimized(false)} 
+                  style={{ backgroundColor: activeSosId ? '#EF4444' : '#3B82F6', padding: 15, borderRadius: 12, width: '90%', alignSelf: 'center', marginTop: 10 }} 
+                  onPress={() => setIsEmergencyMinimized(false)}
                 >
-                  <Ionicons name="warning" size={24} color="#FFF" style={{ marginRight: 10 }} />
-                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>🚨 SOS ATIVO - ABRIR CHAT</Text>
+                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>
+                    {activeSosId ? '🚨 SOS ATIVO - ABRIR CHAT' : '📦 MANTIMENTOS - ABRIR CHAT'}
+                  </Text>
                 </TouchableOpacity>
               )}
 
-              <TouchableOpacity 
-                style={{ 
-                  backgroundColor: '#FFFFFF', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 14, 
-                  alignSelf: 'center', marginTop: activeSosId && isEmergencyMinimized ? 0 : 10, 
-                  marginBottom: 20, flexDirection: 'row', alignItems: 'center',
-                  width: '90%', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, borderWidth: 1, borderColor: '#F3F4F6'
-                }}
-                onPress={() => setShowHistory(true)}
-              >
-                <MaterialCommunityIcons name="clipboard-text-clock-outline" size={26} color="#3B82F6" style={{ marginRight: 10 }} />
-                <Text style={{ fontSize: 16, fontWeight: '700', color: '#1F2937' }}>Histórico de Alertas</Text>
-                <MaterialCommunityIcons name="chevron-right" size={24} color="#9CA3AF" style={{ position: 'absolute', right: 15 }} />
+              {/* Botão de Histórico */}
+              <TouchableOpacity style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, alignSelf: 'center', marginTop: 10, marginBottom: 20, width: '90%', flexDirection: 'row', alignItems: 'center' }} onPress={() => setShowHistory(true)}>
+                <MaterialCommunityIcons name="clipboard-text-clock-outline" size={26} color="#3B82F6" />
+                <Text style={{ fontSize: 16, fontWeight: '700', marginLeft: 10 }}>Histórico de Alertas</Text>
               </TouchableOpacity>
 
               <NewsSection news={news} loadingNews={loadingNews} />
             </View>
           )}
 
-          {showDetailsForm && !isChatOpen && !showHistory && (
-            <SOSDetailsForm 
-              idade={idade} setIdade={setIdade}
-              estaGravida={estaGravida} setEstaGravida={setEstaGravida}
-              temCriancas={temCriancas} setTemCriancas={setTemCriancas}
-              handleConfirmSOS={handleConfirmSOS} isSending={isSending} setShowDetailsForm={setShowDetailsForm}
-            />
-          )}
-
-          {showMantimentosForm && !isChatOpen && !showHistory && (
+          {/* FORMULÁRIO DE SOS */}
+          {showDetailsForm && (
+          <SOSDetailsForm 
+            idade={idade}
+            setIdade={setIdade} 
+            estaGravida={estaGravida}
+            setEstaGravida={setEstaGravida}
+            temCriancas={temCriancas}
+            setTemCriancas={setTemCriancas}
+            handleConfirmSOS={handleConfirmSOS} 
+            setShowDetailsForm={setShowDetailsForm}
+            isSending={isSending}
+          />
+        )}
+          
+          {/* FORMULÁRIO DE MANTIMENTOS */}
+          {showMantimentosForm && (
             <MantimentosDetailsForm 
-              descricao={descricao} setDescricao={setDescricao}
-              quantidade={quantidade} setQuantidade={setQuantidade}
-              urgente={urgente} setUrgente={setUrgente}
+              descricao={descricao} 
+              setDescricao={setDescricao}
+              quantidade={quantidade} 
+              setQuantidade={setQuantidade}
               handleConfirmMantimentos={handleConfirmMantimentos} 
-              isSending={isSending} setShowMantimentosForm={setShowMantimentosForm}
+              setShowMantimentosForm={setShowMantimentosForm} 
             />
           )}
 
-          {isChatOpen && (
-            <View style={{ flex: 1, width: '100%', justifyContent: 'center' }}>
-              <ActiveEmergencyView 
-                activeSosId={activeSosId}
-                currentUserId={auth.currentUser?.uid} 
-                handleCancelSOS={handleCancelSOS}
-                onMinimize={() => setIsEmergencyMinimized(true)} 
-              />
-            </View>
+          {/* CHAT DE SOS (Prioridade sobre mantimentos se ambos existissem) */}
+          {activeSosId && !isEmergencyMinimized && (
+            <ActiveEmergencyView 
+              activeSosId={activeSosId}
+              currentUserId={auth.currentUser?.uid} 
+              handleCancelSOS={handleCancelSOS}
+              onMinimize={() => setIsEmergencyMinimized(true)} 
+            />
           )}
 
-          {showHistory && !isChatOpen && (
+          {/* CHAT DE MANTIMENTOS (Só abre se não houver SOS ativo) */}
+          {activeMantimentoId && !activeSosId && !isEmergencyMinimized && (
+            <ActiveMantimentosView 
+              activePedidoId={activeMantimentoId}
+              currentUserId={auth.currentUser?.uid} 
+              handleCancelPedido={handleCancelMantimento}
+              onMinimize={() => setIsEmergencyMinimized(true)} 
+            />
+          )}
+
+          {/* HISTÓRICO DE ALERTAS */}
+          {showHistory && (
             <View>
                <EmergencyHistoryView />
-               <TouchableOpacity 
-                 style={{ 
-                   padding: 16, alignItems: 'center', backgroundColor: '#4B5563', borderRadius: 12, 
-                   marginHorizontal: 15, marginTop: 10, marginBottom: 25, flexDirection: 'row',
-                   justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-                   shadowOpacity: 0.2, shadowRadius: 4, elevation: 3
-                 }}
-                 onPress={() => setShowHistory(false)}
-               >
-                 <Ionicons name="arrow-back" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>Voltar ao Mapa</Text>
+               <TouchableOpacity style={{ padding: 16, alignItems: 'center', backgroundColor: '#4B5563', borderRadius: 12, margin: 20 }} onPress={() => setShowHistory(false)}>
+                 <Text style={{ color: '#FFF' }}>Voltar ao Mapa</Text>
                </TouchableOpacity>
             </View>
           )}
