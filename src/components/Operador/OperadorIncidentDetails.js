@@ -4,6 +4,7 @@ import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/fi
 import { Alert, KeyboardAvoidingView, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { db } from '../../firebaseConfig'; 
 import EmergencyChat from '../Vitima/EmergencyChat';
+import MantimentosChat from '../Mantimentos/MantimentosChat';
 
 export default function IncidentDetails({ incident, onBack, currentUserId }) {
   if (!incident) return null; 
@@ -119,38 +120,64 @@ export default function IncidentDetails({ incident, onBack, currentUserId }) {
       </View>
 
       {/* 2. ÁREA DE CONTEÚDO E CHAT */}
-      <View style={{ flex: 1 }}>
-        
-        {/* Painel Consolidado de Dados de Triagem */}
-        <View style={{ padding: 15, paddingBottom: 5 }}>
-          <View style={{ 
-            backgroundColor: '#FFF', padding: 16, borderRadius: 12, 
-            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, elevation: 2,
-            borderWidth: 1, borderColor: '#F3F4F6'
-          }}>
-            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#9CA3AF', marginBottom: 10, letterSpacing: 0.5 }}>
-              DADOS DE TRIAGEM COLETADOS
-            </Text>
-            
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={{ fontSize: 16, marginRight: 8 }}>📍</Text>
-              <Text style={{ fontSize: 15, color: '#374151' }}><Text style={{ fontWeight: 'bold' }}>Coordenadas:</Text> {incident.latitude?.toFixed(5)}, {incident.longitude?.toFixed(5)}</Text>
-            </View>
-            
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={{ fontSize: 16, marginRight: 8 }}>🎂</Text>
-              <Text style={{ fontSize: 15, color: '#374151' }}><Text style={{ fontWeight: 'bold' }}>Idade Declarada:</Text> {incident.detalhes?.idade || 'Não informada'}</Text>
-            </View>
-            
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-              <Text style={{ fontSize: 16, marginRight: 8 }}>🚨</Text>
-              <Text style={{ fontSize: 15, color: isCritical ? '#E74C3C' : '#27AE60', fontWeight: '600' }}>
-                <Text style={{ color: '#374151', fontWeight: 'bold' }}>Estado: </Text>
-                {incident.detalhes?.criancas ? "CRÍTICO (Crianças)" : incident.detalhes?.gravida ? "CRÍTICO (Grávida)" : "Atendimento Padrão"}
+        <View style={{ flex: 1 }}>
+          
+          {/* Painel Consolidado de Dados de Triagem */}
+          <View style={{ padding: 15, paddingBottom: 5 }}>
+            <View style={{ 
+              backgroundColor: '#FFF', padding: 16, borderRadius: 12, 
+              shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, elevation: 2,
+              borderWidth: 1, borderColor: '#F3F4F6'
+            }}>
+              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#9CA3AF', marginBottom: 10, letterSpacing: 0.5 }}>
+                DADOS DE TRIAGEM COLETADOS
               </Text>
+              
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                <Text style={{ fontSize: 16, marginRight: 8 }}>📍</Text>
+                <Text style={{ fontSize: 15, color: '#374151' }}><Text style={{ fontWeight: 'bold' }}>Coordenadas:</Text> {incident.latitude?.toFixed(5)}, {incident.longitude?.toFixed(5)}</Text>
+              </View>
+              
+              {/* CONDIÇÃO: Verifica se é MANTIMENTO ou SOS */}
+              {incident.tipoAlerta === 'MANTIMENTO' ? (
+                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                    <Text style={{ fontSize: 16, marginRight: 8 }}>📦</Text>
+                    <Text style={{ fontSize: 15, color: '#374151' }}><Text style={{ fontWeight: 'bold' }}>Pedido:</Text> {incident.detalhes?.descricao || 'Não informado'}</Text>
+                  </View>
+                  
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                    <Text style={{ fontSize: 16, marginRight: 8 }}>🔢</Text>
+                    <Text style={{ fontSize: 15, color: '#374151' }}><Text style={{ fontWeight: 'bold' }}>Quantidade:</Text> {incident.detalhes?.quantidade || 'Não informada'}</Text>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                    <Text style={{ fontSize: 16, marginRight: 8 }}>🚨</Text>
+                    <Text style={{ fontSize: 15, color: incident.detalhes?.urgente ? '#E74C3C' : '#27AE60', fontWeight: '600' }}>
+                      <Text style={{ color: '#374151', fontWeight: 'bold' }}>Estado: </Text>
+                      {incident.detalhes?.urgente ? "URGENTE" : "Atendimento Padrão"}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                    <Text style={{ fontSize: 16, marginRight: 8 }}>🎂</Text>
+                    <Text style={{ fontSize: 15, color: '#374151' }}><Text style={{ fontWeight: 'bold' }}>Idade Declarada:</Text> {incident.detalhes?.idade || 'Não informada'}</Text>
+                  </View>
+                  
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                    <Text style={{ fontSize: 16, marginRight: 8 }}>🚨</Text>
+                    <Text style={{ fontSize: 15, color: isCritical ? '#E74C3C' : '#27AE60', fontWeight: '600' }}>
+                      <Text style={{ color: '#374151', fontWeight: 'bold' }}>Estado: </Text>
+                      {incident.detalhes?.criancas ? "CRÍTICO (Crianças)" : incident.detalhes?.gravida ? "CRÍTICO (Grávida)" : "Atendimento Padrão"}
+                    </Text>
+                  </View>
+                </>
+              )}
+              
             </View>
           </View>
-        </View>
 
         {/* BANNER DE PEDIDO DE CANCELAMENTO */}
         {incident.cancelRequested && (
@@ -183,11 +210,22 @@ export default function IncidentDetails({ incident, onBack, currentUserId }) {
         {/* Módulo de Mensagens */}
         <View style={{ flex: 1, paddingHorizontal: 10, paddingTop: 5 }}>
           {incident.status === 'pendente' ? (
-            <EmergencyChat 
-              sosId={incident.id} 
-              currentUserRole="operador" 
-              currentUserId={currentUserId} 
-            />
+            
+            /* CONDIÇÃO: Escolhe o chat certo consoante o tipo de alerta */
+            incident.tipoAlerta === 'MANTIMENTO' ? (
+              <MantimentosChat 
+                mantimentosId={incident.id} 
+                currentUserRole="operador" 
+                currentUserId={currentUserId} 
+              />
+            ) : (
+              <EmergencyChat 
+                sosId={incident.id} 
+                currentUserRole="operador" 
+                currentUserId={currentUserId} 
+              />
+            )
+
           ) : (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <Text style={{ fontSize: 40, marginBottom: 10 }}>✅</Text>

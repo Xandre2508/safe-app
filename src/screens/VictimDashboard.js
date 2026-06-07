@@ -1,6 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where, orderBy, limit } from 'firebase/firestore'; 
-import { signOut } from 'firebase/auth'; // Importação para o Logout
 import { useEffect, useState, useRef } from 'react'; 
 import { Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-maps';
@@ -18,6 +17,7 @@ import InitialActionButtons from '../components/Vitima/InitialActionButtons';
 import NewsSection from '../components/Vitima/NewsSection';
 import SOSDetailsForm from '../components/Vitima/SOSDetailsForm';
 import MantimentosDetailsForm from '../components/Mantimentos/MantimentosDetailsForm';
+import ActiveMantimentosView from '../components/Mantimentos/ActiveMantimentosView';
 
 // Importação dos Custom Hooks
 import { useLocation } from '../hooks/useLocation';
@@ -42,6 +42,14 @@ export default function VictimDashboard({ navigation }) {
   const [showMantimentosForm, setShowMantimentosForm] = useState(false); 
   
   const [isEmergencyMinimized, setIsEmergencyMinimized] = useState(false);
+  const isMinimizedRef = useRef(isEmergencyMinimized); 
+
+  // NOVO: Estados e Refs para o Chat de Mantimentos
+  const [activeMantimentosId, setActiveMantimentosId] = useState(null);
+  const [isMantimentosMinimized, setIsMantimentosMinimized] = useState(false);
+  const isMantMinimizedRef = useRef(isMantimentosMinimized);
+
+  const [userName, setUserName] = useState(''); 
   const [activeSosId, setActiveSosId] = useState(null); 
   const [userName, setUserName] = useState(''); 
 
@@ -63,9 +71,10 @@ export default function VictimDashboard({ navigation }) {
     isMinimizedRef.current = isEmergencyMinimized;
   }, [isEmergencyMinimized]);
 
+  // NOVO: Sincronizar o Ref dos Mantimentos
   useEffect(() => {
-    activeSosIdRef.current = activeSosId;
-  }, [activeSosId]);
+    isMantMinimizedRef.current = isMantimentosMinimized;
+  }, [isMantimentosMinimized]);
 
   useEffect(() => {
     const requestNotificationPermissions = async () => {
@@ -91,7 +100,7 @@ export default function VictimDashboard({ navigation }) {
     fetchUserName();
   }, []);
 
-  // --- MOTOR DE ESTADO DE EMERGÊNCIA (Verifica se há um SOS PENDENTE) ---
+  // --- MOTOR: SOS ---
   useEffect(() => {
     if (!auth.currentUser) return; 
     
@@ -125,7 +134,35 @@ export default function VictimDashboard({ navigation }) {
     return () => unsubscribe();
   }, []); 
 
-  // --- MOTOR DE NOTIFICAÇÕES (Escuta mensagens da Central) ---
+  // NOVO: MOTOR: MANTIMENTOS ---
+  useEffect(() => {
+    if (!auth.currentUser) return; 
+    
+    const q = query(collection(db, 'pedidos_mantimentos'), where('userId', '==', auth.currentUser.uid));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
+      
+      if (pendingRequest) {
+        if (pendingRequest.id !== activeMantimentosId) {
+            setActiveMantimentosId(pendingRequest.id);
+            setIsMantimentosMinimized(false);
+        }
+      } else {
+        setActiveMantimentosId((prevId) => {
+          if (prevId) {
+            const completedDoc = snapshot.docs.find(doc => doc.id === prevId && doc.data().status === 'concluido');
+            if (completedDoc) Alert.alert("Pedido Concluído ✅", "O teu pedido de mantimentos foi encerrado.");
+          }
+          return null; 
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [activeMantimentosId]);
+
+  // --- NOTIFICAÇÕES: SOS ---
   useEffect(() => {
     if (!activeSosId) return;
 
@@ -135,22 +172,20 @@ export default function VictimDashboard({ navigation }) {
       limit(1)
     );
 
-    const unsubscribeMessages = onSnapshot(msgQuery, 
-      (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'added') {
-            const msgData = change.doc.data();
-            
-            if (msgData.senderRole === 'operador' && isMinimizedRef.current) {
-              Notifications.scheduleNotificationAsync({
-                content: {
-                  title: 'Central de Operações',
-                  body: msgData.text,
-                  sound: true,
-                },
-                trigger: null, 
-              });
-            }
+    const unsubscribeMessages = onSnapshot(msgQuery, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const msgData = change.doc.data();
+          
+          if (msgData.senderRole === 'operador' && isMinimizedRef.current) {
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: 'Central de Operações',
+                body: msgData.text,
+                sound: true,
+              },
+              trigger: null,
+            });
           }
         });
       },
@@ -163,7 +198,38 @@ export default function VictimDashboard({ navigation }) {
     return () => unsubscribeMessages();
   }, [activeSosId]);
 
-  // --- AÇÕES ---
+  // NOVO: NOTIFICAÇÕES: MANTIMENTOS ---
+  useEffect(() => {
+    if (!activeMantimentosId) return;
+
+    const msgQuery = query(
+      collection(db, 'pedidos_mantimentos', activeMantimentosId, 'messages'), 
+      orderBy('timestamp', 'desc'), 
+      limit(1)
+    );
+
+    const unsubscribeMessages = onSnapshot(msgQuery, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const msgData = change.doc.data();
+          
+          if (msgData.senderRole === 'operador' && isMantMinimizedRef.current) {
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: 'Apoio Logístico',
+                body: msgData.text,
+                sound: true,
+              },
+              trigger: null,
+            });
+          }
+        }
+      });
+    });
+
+    return () => unsubscribeMessages();
+  }, [activeMantimentosId]);
+
   const handleConfirmSOS = async () => {
     if (!location) return Alert.alert(Strings.wait, Strings.victim.locationWait); 
     setIsSending(true); 
@@ -204,7 +270,7 @@ export default function VictimDashboard({ navigation }) {
     setIsSending(true); 
 
     try {
-      await addDoc(collection(db, 'pedidos_mantimentos'), {
+      const docRef = await addDoc(collection(db, 'pedidos_mantimentos'), {
         userId: auth.currentUser ? auth.currentUser.uid : 'anonimo',
         userName: userName || 'Utilizador Desconhecido', 
         latitude: location.latitude,
@@ -212,6 +278,14 @@ export default function VictimDashboard({ navigation }) {
         status: 'pendente', 
         detalhes: { descricao: descricao || 'Não informada', quantidade: quantidade || 'Não informada', urgente: urgente }, 
         timestamp: serverTimestamp() 
+      });
+
+      // NOVO: Cria a mensagem inicial no chat de mantimentos
+      await addDoc(collection(db, 'pedidos_mantimentos', docRef.id, 'messages'), {
+        senderId: 'system', 
+        senderRole: 'sistema',
+        text: 'O teu pedido de mantimentos foi registado. Um operador irá analisar o pedido em breve.',
+        timestamp: serverTimestamp()
       });
 
       setShowMantimentosForm(false);
@@ -252,50 +326,45 @@ export default function VictimDashboard({ navigation }) {
     );
   };
 
-  const handleLogout = () => {
-    Alert.alert("Terminar Sessão", "Tens a certeza que pretendes sair da conta?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Sair", onPress: () => {
-          signOut(auth).then(() => {
-            navigation.replace('LoginScreen'); // Verifica se o nome da tua rota de Login é este
-          }).catch(error => {
-            Alert.alert("Erro", "Não foi possível terminar sessão.");
-          });
-      }, style: "destructive" }
-    ]);
-  };
-
-  // Variável para determinar se o chat está ativo e visível no ecrã
-  const isChatOpen = activeSosId && !isEmergencyMinimized;
+  // NOVO: Constante para saber se ALGUM chat está aberto
+  const isAnyChatOpen = (activeSosId && !isEmergencyMinimized) || (activeMantimentosId && !isMantimentosMinimized);
 
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* MAPA - Encolhe dinamicamente se o chat estiver aberto para dar espaço ao teclado */}
-      <View style={[styles.mapContainer, isChatOpen && { flex: 0, height: 150 }]}>
+      <View style={{ position: 'absolute', top: 50, left: 20, zIndex: 10 }}>
+        <TouchableOpacity 
+          style={{
+            backgroundColor: '#FFFFFF', width: 50, height: 50, borderRadius: 25,
+            justifyContent: 'center', alignItems: 'center', shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 5, elevation: 4
+          }} 
+          onPress={() => navigation.navigate('ProfileScreen')}
+        >
+          <Ionicons name="person" size={24} color="#4B5563" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.mapContainer}>
         {location && <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />}
       </View>
 
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
       >
         <ScrollView 
-          style={styles.bottomSection} 
           showsVerticalScrollIndicator={false} 
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ 
-            flexGrow: 1, 
-            justifyContent: isChatOpen ? 'center' : 'flex-start',
-            paddingBottom: 100 // Espaço extra no final para a Navbar não tapar o conteúdo
-          }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 50 }}
         >
           
-          {!showDetailsForm && !showMantimentosForm && !isChatOpen && !showHistory && (
+          {!showDetailsForm && !showMantimentosForm && !isAnyChatOpen && !showHistory && (
             <View>
               <InitialActionButtons setShowDetailsForm={setShowDetailsForm} setShowMantimentosForm={setShowMantimentosForm} />
               
+              {/* BANNER SOS */}
               {activeSosId && isEmergencyMinimized && (
                 <TouchableOpacity 
                   style={{
@@ -308,6 +377,22 @@ export default function VictimDashboard({ navigation }) {
                 >
                   <Ionicons name="warning" size={24} color="#FFF" style={{ marginRight: 10 }} />
                   <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>🚨 SOS ATIVO - ABRIR CHAT</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* NOVO: BANNER MANTIMENTOS */}
+              {activeMantimentosId && isMantimentosMinimized && (
+                <TouchableOpacity 
+                  style={{
+                    backgroundColor: '#3B82F6', padding: 15, borderRadius: 12, width: '90%',          
+                    alignSelf: 'center', marginTop: 10, marginBottom: 10, flexDirection: 'row', 
+                    alignItems: 'center', justifyContent: 'center', shadowColor: '#000', 
+                    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, elevation: 4
+                  }}
+                  onPress={() => setIsMantimentosMinimized(false)} 
+                >
+                  <Ionicons name="cube" size={24} color="#FFF" style={{ marginRight: 10 }} />
+                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>📦 MANTIMENTOS - ABRIR CHAT</Text>
                 </TouchableOpacity>
               )}
 
@@ -330,7 +415,7 @@ export default function VictimDashboard({ navigation }) {
             </View>
           )}
 
-          {showDetailsForm && !isChatOpen && !showHistory && (
+          {showDetailsForm && !isAnyChatOpen && !showHistory && (
             <SOSDetailsForm 
               idade={idade} setIdade={setIdade}
               estaGravida={estaGravida} setEstaGravida={setEstaGravida}
@@ -339,7 +424,7 @@ export default function VictimDashboard({ navigation }) {
             />
           )}
 
-          {showMantimentosForm && !isChatOpen && !showHistory && (
+          {showMantimentosForm && !isAnyChatOpen && !showHistory && (
             <MantimentosDetailsForm 
               descricao={descricao} setDescricao={setDescricao}
               quantidade={quantidade} setQuantidade={setQuantidade}
@@ -349,18 +434,28 @@ export default function VictimDashboard({ navigation }) {
             />
           )}
 
-          {isChatOpen && (
-            <View style={{ flex: 1, width: '100%', justifyContent: 'center' }}>
-              <ActiveEmergencyView 
-                activeSosId={activeSosId}
+          {/* VISTA DO CHAT SOS */}
+          {activeSosId && !isEmergencyMinimized && (
+            <ActiveEmergencyView 
+              activeSosId={activeSosId}
+              currentUserId={auth.currentUser?.uid} 
+              handleCancelSOS={handleCancelSOS}
+              onMinimize={() => setIsEmergencyMinimized(true)} 
+            />
+          )}
+
+          {/* NOVO: VISTA DO CHAT MANTIMENTOS */}
+          {activeMantimentosId && !isMantimentosMinimized && (
+            <View style={{ flex: 1, paddingHorizontal: 15, paddingTop: 10 }}>
+              <ActiveMantimentosView 
+                activeMantimentosId={activeMantimentosId}
                 currentUserId={auth.currentUser?.uid} 
-                handleCancelSOS={handleCancelSOS}
-                onMinimize={() => setIsEmergencyMinimized(true)} 
+                onMinimize={() => setIsMantimentosMinimized(true)} 
               />
             </View>
           )}
 
-          {showHistory && !isChatOpen && (
+          {showHistory && !isAnyChatOpen && (
             <View>
                <EmergencyHistoryView />
                <TouchableOpacity 
@@ -378,43 +473,14 @@ export default function VictimDashboard({ navigation }) {
             </View>
           )}
 
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* NAVBAR INFERIOR PADRONIZADA (Posição Absoluta) */}
-      <View style={{
-        position: 'absolute', 
-        bottom: 0,
-        width: '100%',
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        paddingTop: 12,
-        paddingBottom: Platform.OS === 'ios' ? 35 : 15, 
-        borderTopWidth: 1,
-        borderTopColor: '#E5E7EB',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        elevation: 15,
-        zIndex: 999, 
-      }}>
-        <TouchableOpacity onPress={() => navigation.navigate('ProfileScreen')} style={{ alignItems: 'center' }}>
-            <Ionicons name="person-outline" size={24} color="#6B7280" />
-            <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Perfil</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => {}} style={{ alignItems: 'center' }}>
-            <Ionicons name="shield-checkmark" size={26} color="#EF4444" />
-            <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4, fontWeight: '700' }}>S.A.F.E.</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={handleLogout} style={{ alignItems: 'center' }}>
-            <Ionicons name="log-out-outline" size={24} color="#6B7280" />
-            <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Sair</Text>
-        </TouchableOpacity>
-      </View>
+          {!showHistory && !isAnyChatOpen && (
+            <TouchableOpacity
+              style={[styles.logoutButton, { marginVertical: 20 }]}
+              onPress={() => navigation.navigate('Login')}
+            >
+              <Text style={styles.logoutButtonText}>Sair da Conta</Text>
+            </TouchableOpacity>
+          )}
 
     </SafeAreaView>
   );
