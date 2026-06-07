@@ -97,28 +97,50 @@ export default function VictimDashboard({ navigation }) {
     
     const q = query(collection(db, 'sos_requests'), where('userId', '==', auth.currentUser.uid));
 
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
-        
-        if (pendingRequest) {
-          if (pendingRequest.id !== activeSosIdRef.current) {
-              setActiveSosId(pendingRequest.id);
-              setIsEmergencyMinimized(false);
-          }
-        } else {
-          if (activeSosIdRef.current) {
-            const completedDoc = snapshot.docs.find(doc => doc.id === activeSosIdRef.current && doc.data().status === 'concluido');
-            if (completedDoc) {
-              Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
-            }
-            setActiveSosId(null); 
-          }
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
+      
+      if (pendingRequest) {
+        if (pendingRequest.id !== activeSosId) {
+            setActiveSosId(pendingRequest.id);
+            setIsEmergencyMinimized(false);
         }
-      },
-      // Tratamento de erro silencioso para evitar "Permission Denied" no logout
-      (error) => {
-        console.log("Listener de SOS interrompido (esperado durante o logout):", error.code);
+      } else {
+        setActiveSosId((prevId) => {
+          if (prevId) {
+            const completedDoc = snapshot.docs.find(doc => doc.id === prevId && doc.data().status === 'concluido');
+            if (completedDoc) Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
+          }
+          return null; 
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [activeSosId]);
+
+  // NOVO: MOTOR: MANTIMENTOS ---
+  useEffect(() => {
+    if (!auth.currentUser) return; 
+    
+    const q = query(collection(db, 'pedidos_mantimentos'), where('userId', '==', auth.currentUser.uid));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
+      
+      if (pendingRequest) {
+        if (pendingRequest.id !== activeMantimentosId) {
+            setActiveMantimentosId(pendingRequest.id);
+            setIsMantimentosMinimized(false);
+        }
+      } else {
+        setActiveMantimentosId((prevId) => {
+          if (prevId) {
+            const completedDoc = snapshot.docs.find(doc => doc.id === prevId && doc.data().status === 'concluido');
+            if (completedDoc) Alert.alert("Pedido Concluído ✅", "O teu pedido de mantimentos foi encerrado.");
+          }
+          return null; 
+        });
       }
     );
 
@@ -135,30 +157,24 @@ export default function VictimDashboard({ navigation }) {
       limit(1)
     );
 
-    const unsubscribeMessages = onSnapshot(msgQuery, 
-      (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'added') {
-            const msgData = change.doc.data();
-            
-            if (msgData.senderRole === 'operador' && isMinimizedRef.current) {
-              Notifications.scheduleNotificationAsync({
-                content: {
-                  title: 'Central de Operações',
-                  body: msgData.text,
-                  sound: true,
-                },
-                trigger: null, 
-              });
-            }
+    const unsubscribeMessages = onSnapshot(msgQuery, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const msgData = change.doc.data();
+          
+          if (msgData.senderRole === 'operador' && isMinimizedRef.current) {
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: 'Central de Operações',
+                body: msgData.text,
+                sound: true,
+              },
+              trigger: null,
+            });
           }
-        });
-      },
-      // Tratamento de erro silencioso para evitar "Permission Denied" no logout
-      (error) => {
-        console.log("Listener de Mensagens interrompido (esperado durante o logout):", error.code);
-      }
-    );
+        }
+      });
+    });
 
     return () => unsubscribeMessages();
   }, [activeSosId]);
@@ -378,44 +394,17 @@ export default function VictimDashboard({ navigation }) {
             </View>
           )}
 
+          {!showHistory && !isAnyChatOpen && (
+            <TouchableOpacity
+              style={[styles.logoutButton, { marginVertical: 20 }]}
+              onPress={() => navigation.navigate('Login')}
+            >
+              <Text style={styles.logoutButtonText}>Sair da Conta</Text>
+            </TouchableOpacity>
+          )}
+
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* NAVBAR INFERIOR PADRONIZADA (Posição Absoluta) */}
-      <View style={{
-        position: 'absolute', 
-        bottom: 0,
-        width: '100%',
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        paddingTop: 12,
-        paddingBottom: Platform.OS === 'ios' ? 35 : 15, 
-        borderTopWidth: 1,
-        borderTopColor: '#E5E7EB',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        elevation: 15,
-        zIndex: 999, 
-      }}>
-        <TouchableOpacity onPress={() => navigation.navigate('ProfileScreen')} style={{ alignItems: 'center' }}>
-            <Ionicons name="person-outline" size={24} color="#6B7280" />
-            <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Perfil</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => {}} style={{ alignItems: 'center' }}>
-            <Ionicons name="shield-checkmark" size={26} color="#EF4444" />
-            <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4, fontWeight: '700' }}>S.A.F.E.</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={handleLogout} style={{ alignItems: 'center' }}>
-            <Ionicons name="log-out-outline" size={24} color="#6B7280" />
-            <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Sair</Text>
-        </TouchableOpacity>
-      </View>
-
     </SafeAreaView>
   );
 }
