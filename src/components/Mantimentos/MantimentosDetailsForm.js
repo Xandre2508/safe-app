@@ -11,7 +11,6 @@ import { styles } from '../../styles/VictimDashboardStyles';
 export default function MantimentosDetailsForm({ 
   descricao, setDescricao, 
   quantidade, setQuantidade, 
-  urgente, setUrgente, 
   setShowMantimentosForm, handleConfirmMantimentos, isSending 
 }) {
   return (
@@ -43,22 +42,6 @@ export default function MantimentosDetailsForm({
           placeholderTextColor="#9CA3AF"
           value={quantidade}
           onChangeText={setQuantidade}
-        />
-      </View>
-
-      {/* Switch para marcar como urgente */}
-      <View style={localStyles.switchRow}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Ionicons name="alert-circle-outline" size={20} color={urgente ? "#EF4444" : "#6B7280"} />
-          <Text style={[localStyles.switchLabel, urgente && { color: '#EF4444', fontWeight: 'bold' }]}>
-            É um pedido urgente?
-          </Text>
-        </View>
-        <Switch 
-          value={urgente} 
-          onValueChange={setUrgente} 
-          trackColor={{ false: "#D1D5DB", true: "#FCA5A5" }}
-          thumbColor={urgente ? "#EF4444" : "#f4f3f4"}
         />
       </View>
 

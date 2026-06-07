@@ -1,14 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+// Se tiveres um ficheiro de estilos próprio para os mantimentos, podes alterar aqui.
+// Caso contrário, podes manter o do VictimDashboard se as caixas do chat forem iguais.
 import { styles } from '../../styles/VictimDashboardStyles';
+// 🔄 ALTERADO: Vamos importar um chat próprio para os mantimentos
 import MantimentosChat from './MantimentosChat';
 
-export default function ActiveMantimentosView({ activeMantimentosId, currentUserId, handleCancelSOS, onMinimize }) {
+// 🔄 ALTERADO: Nome do componente e props
+export default function ActiveMantimentosView({ activePedidoId, currentUserId, handleCancelPedido, onMinimize }) {
   return (
     <View style={{ width: '100%' }}>
       
-      {/* Botão para Minimizar */}
+      {/* Botão para Minimizar / Voltar ao Mapa */}
       <View style={localStyles.header}>
         <TouchableOpacity onPress={onMinimize} style={localStyles.minimizeBtn}>
           <Ionicons name="chevron-down" size={24} color="#4B5563" />
@@ -16,26 +19,28 @@ export default function ActiveMantimentosView({ activeMantimentosId, currentUser
         </TouchableOpacity>
       </View>
 
-      {/* CHAT CONTAINER - Aqui usamos o teu chat de mantimentos */}
-      <View style={[styles.statusCard, styles.chatContainer, { marginTop: 5, borderColor: '#BFDBFE', borderWidth: 1 }]}>
+      {/* CHAT CONTAINER */}
+      <View style={[styles.statusCard, styles.chatContainer, { marginTop: 5 }]}>
+        {/* 🔄 ALTERADO: Usar o componente MantimentosChat com o ID do pedido */}
         <MantimentosChat 
-          activeId={activeMantimentosId} 
+          mantimentoId={activePedidoId} 
           currentUserId={currentUserId} 
           currentUserRole="vitima"
         />
       </View>
       
-      {/* BOTÃO DE CANCELAMENTO (Azul para Mantimentos) */}
+      {/* BOTÃO ATUALIZADO: Solicitar Cancelamento */}
       <TouchableOpacity 
         style={[
           styles.btnDeactivateSOS, 
-          { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', borderWidth: 1, flexDirection: 'row', justifyContent: 'center' }
+          { backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 1, flexDirection: 'row', justifyContent: 'center' }
         ]} 
-        onPress={handleCancelSOS}
+        // 🔄 ALTERADO: Função de cancelar o pedido
+        onPress={handleCancelPedido}
       >
-        <Ionicons name="close-circle-outline" size={20} color="#3B82F6" style={{ marginRight: 8 }} />
-        <Text style={[styles.btnDeactivateSOSText, { color: '#3B82F6' }]}>
-          Cancelar Pedido de Mantimentos
+        <Ionicons name="close-circle-outline" size={20} color="#EF4444" style={{ marginRight: 8 }} />
+        <Text style={[styles.btnDeactivateSOSText, { color: '#EF4444' }]}>
+          Cancelar Pedido
         </Text>
       </TouchableOpacity>
 
@@ -43,8 +48,28 @@ export default function ActiveMantimentosView({ activeMantimentosId, currentUser
   );
 }
 
+// Estilos locais para o botão de minimizar
 const localStyles = StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 15, marginBottom: 5 },
-  minimizeBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB' },
-  minimizeText: { color: '#4B5563', fontWeight: '600', marginLeft: 4, fontSize: 14 }
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 15,
+    marginBottom: 5,
+  },
+  minimizeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  minimizeText: {
+    color: '#4B5563',
+    fontWeight: '600',
+    marginLeft: 4,
+    fontSize: 14,
+  }
 });

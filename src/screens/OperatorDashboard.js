@@ -24,18 +24,19 @@ Notifications.setNotificationHandler({
 
 export default function OperatorDashboard({ navigation }) {
   // --- ESTADOS ---
-  const [activeTab, setActiveTab] = useState('sos'); 
+  const [activeTab, setActiveTab] = useState('sos'); // 'sos' | 'radio'
   const [todasOcorrencias, setTodasOcorrencias] = useState([]);
   const [selectedIncidentId, setSelectedIncidentId] = useState(null);
   const [socorristas, setSocorristas] = useState([]);
   const [selectedRescuer, setSelectedRescuer] = useState(null);
 
-  // --- REFS (Para controlo de Notificações) ---
+  // --- REFS (Para controlo de Notificações sem causar re-renders) ---
   const isFirstLoadSOS = useRef(true);
   const isFirstLoadRadio = useRef(true);
   const currentTabRef = useRef(activeTab);
   const currentRescuerRef = useRef(selectedRescuer);
 
+  // Mantém as Refs atualizadas com o estado atual
   useEffect(() => { currentTabRef.current = activeTab; }, [activeTab]);
   useEffect(() => { currentRescuerRef.current = selectedRescuer; }, [selectedRescuer]);
 
@@ -52,65 +53,41 @@ export default function OperatorDashboard({ navigation }) {
     requestPermissions();
   }, []);
 
-  // --- EFEITO 2: Ocorrências SOS e Mantimentos (Unificados) ---
+  // --- EFEITO 2: Ocorrências SOS e Mantimentos ---
   useFocusEffect(
     useCallback(() => {
-      const qSOS = query(collection(db, 'sos_requests'));
-      const qMantimentos = query(collection(db, 'pedidos_mantimentos'));
+      let sosData = [];
+      let mantimentosData = [];
 
-      let cacheSOS = [];
-      let cacheMantimentos = [];
-
-      const updateAllIncidents = () => {
-        let combined = [...cacheSOS, ...cacheMantimentos];
-        
+      // Função que junta as duas listas e ordena
+      const updateCombinedList = () => {
+        let combined = [...sosData, ...mantimentosData];
         combined.sort((a, b) => {
           if (a.status === 'pendente' && b.status !== 'pendente') return -1;
           if (a.status !== 'pendente' && b.status === 'pendente') return 1;
-          const timeA = a.timestamp?.toMillis() || 0;
-          const timeB = b.timestamp?.toMillis() || 0;
-          return timeB - timeA;
+          return 0; 
         });
-        
         setTodasOcorrencias(combined);
       };
 
-      const handleSnapshot = (snapshot, typeName) => {
-        if (!isFirstLoadSOS.current) {
-          snapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
-              const data = change.doc.data();
-              if (data.status === 'pendente') {
-                Notifications.scheduleNotificationAsync({
-                  content: {
-                    title: typeName === 'SOS' ? '🚨 NOVO ALERTA SOS' : '📦 NOVO PEDIDO MANTIMENTOS',
-                    body: `${typeName} reportado por ${data.userName || 'Vítima'}.`,
-                    sound: true,
-                  },
-                  trigger: null,
-                });
-              }
-            }
-          });
-        }
+      // Escutar SOS
+      const qSos = query(collection(db, 'sos_requests'));
+      const unsubSos = onSnapshot(qSos, (snapshot) => {
+        sosData = snapshot.docs.map(doc => ({ id: doc.id, tipoAlerta: 'SOS', ...doc.data() }));
+        updateCombinedList();
+      });
 
-        const list = [];
-        snapshot.forEach((doc) => list.push({ id: doc.id, tipoAlerta: typeName, ...doc.data() }));
-        return list;
+      // Escutar Mantimentos
+      const qMant = query(collection(db, 'pedidos_mantimentos'));
+      const unsubMant = onSnapshot(qMant, (snapshot) => {
+        mantimentosData = snapshot.docs.map(doc => ({ id: doc.id, tipoAlerta: 'MANTIMENTO', ...doc.data() }));
+        updateCombinedList();
+      });
+
+      return () => {
+        unsubSos();
+        unsubMant();
       };
-
-      const unsubSOS = onSnapshot(qSOS, (snapshot) => {
-        cacheSOS = handleSnapshot(snapshot, 'SOS');
-        updateAllIncidents();
-        if (isFirstLoadSOS.current) isFirstLoadSOS.current = false;
-      });
-
-      const unsubMant = onSnapshot(qMantimentos, (snapshot) => {
-        cacheMantimentos = handleSnapshot(snapshot, 'MANTIMENTO');
-        updateAllIncidents();
-      });
-
-      return () => { unsubSOS(); unsubMant(); };
     }, [])
   );
 
@@ -125,10 +102,11 @@ export default function OperatorDashboard({ navigation }) {
     return () => unsubscribe();
   }, []);
 
-  // --- EFEITO 4: Notificações de Rádio ---
+  // --- EFEITO 4: Notificações de Rádio (Ouve todos os socorristas ativos) ---
   useEffect(() => {
     if (socorristas.length === 0) return;
 
+    // Cria um listener para o chat de cada socorrista
     const unsubscribes = socorristas.map((socorrista) => {
       const qMsg = query(collection(db, 'operator_rescuer_chats', socorrista.id, 'messages'), orderBy('timestamp', 'desc'), limit(1));
       
@@ -137,6 +115,8 @@ export default function OperatorDashboard({ navigation }) {
           snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
               const msgData = change.doc.data();
+              
+              // Só notifica se a mensagem for do socorrista E o operador não estiver a olhar para o chat dele
               const isLookingAtThisRescuer = currentTabRef.current === 'radio' && currentRescuerRef.current?.id === socorrista.id;
               
               if (msgData.senderRole === 'socorrista' && !isLookingAtThisRescuer) {
@@ -155,11 +135,14 @@ export default function OperatorDashboard({ navigation }) {
       });
     });
 
+    // Timeout ligeiro para garantir que os dados antigos carregaram antes de ativar o gatilho de notificações
     setTimeout(() => { isFirstLoadRadio.current = false; }, 1000);
+
+    // Limpeza de todos os listeners quando o ecrã for desmontado
     return () => unsubscribes.forEach(unsub => unsub());
   }, [socorristas]);
 
-  // --- AÇÕES ---
+  // --- ACÕES ---
   const handleLogout = () => {
     Alert.alert("Terminar Sessão", "Tens a certeza que queres sair da central?", [
       { text: "Cancelar", style: "cancel" },
@@ -211,7 +194,7 @@ export default function OperatorDashboard({ navigation }) {
       {/* ÁREA DE CONTEÚDO */}
       <View style={(!selectedIncidentId && !selectedRescuer) ? styles.contentPadding : { flex: 1 }}>
         
-        {/* ABA: SOS & MANTIMENTOS */}
+        {/* ABA: SOS / MANTIMENTOS */}
         {activeTab === 'sos' && (
           <>
             {!selectedIncidentId ? (

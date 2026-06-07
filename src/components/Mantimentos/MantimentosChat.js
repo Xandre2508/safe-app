@@ -3,18 +3,17 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { db } from '../../firebaseConfig';
 
-export default function MantimentosChat({ mantimentosId, currentUserRole, currentUserId }) {
+export default function MantimentosChat({ mantimentoId, currentUserRole, currentUserId }) {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
-  
   const scrollViewRef = useRef();
 
-  // Listener para mensagens de MANTIMENTOS
+  // Listener para buscar mensagens na coleção de mantimentos
   useEffect(() => {
-    if (!mantimentosId) return;
+    if (!mantimentoId) return;
 
     const q = query(
-      collection(db, 'pedidos_mantimentos', mantimentosId, 'messages'),
+      collection(db, 'pedidos_mantimentos', mantimentoId, 'messages'),
       orderBy('timestamp', 'asc')
     );
 
@@ -27,16 +26,16 @@ export default function MantimentosChat({ mantimentosId, currentUserRole, curren
     });
 
     return () => unsubscribe();
-  }, [mantimentosId]);
+  }, [mantimentoId]);
 
   const handleSendMessage = async () => {
-    if (!chatInput.trim() || !mantimentosId) return;
+    if (!chatInput.trim() || !mantimentoId) return;
 
     const messageText = chatInput;
     setChatInput(''); 
 
     try {
-      await addDoc(collection(db, 'pedidos_mantimentos', mantimentosId, 'messages'), {
+      await addDoc(collection(db, 'pedidos_mantimentos', mantimentoId, 'messages'), {
         senderId: currentUserId,
         senderRole: currentUserRole,
         text: messageText,
@@ -47,58 +46,63 @@ export default function MantimentosChat({ mantimentosId, currentUserRole, curren
     }
   };
 
+  // Cores adaptadas para o tema "Mantimentos" (Azul)
+  const isMe = (msg) => msg.senderRole === currentUserRole;
+  const isSystem = (msg) => msg.senderRole === 'sistema';
+  const primaryColor = '#3B82F6'; // Azul
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#FFF', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#BFDBFE', width: '100%' }}>
+    <View style={{ flex: 1, backgroundColor: '#FFF', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#E0E0E0', width: '100%' }}>
       
-      {/* Cabeçalho do Chat de Mantimentos */}
+      {/* Cabeçalho */}
       {currentUserRole === 'vitima' && (
-        <View style={{ borderBottomWidth: 1, borderBottomColor: '#EFF6FF', paddingBottom: 8, marginBottom: 10, width: '100%' }}>
-          <Text style={{ fontWeight: 'bold', color: '#3B82F6', fontSize: 16 }}>📦 Chat de Mantimentos</Text>
-          <Text style={{ fontSize: 12, color: '#60A5FA' }}>A sua localização foi enviada ao operador.</Text>
+        <View style={{ borderBottomWidth: 1, borderBottomColor: '#EEEEEE', paddingBottom: 8, marginBottom: 10, width: '100%' }}>
+          <Text style={{ fontWeight: 'bold', color: primaryColor, fontSize: 16 }}>📦 Chat de Mantimentos</Text>
+          <Text style={{ fontSize: 12, color: '#7F8C8D' }}>A sua localização está a ser partilhada.</Text>
         </View>
       )}
 
-      {/* Histórico de Mensagens */}
+      {/* Histórico */}
       <ScrollView 
         ref={scrollViewRef}
         onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
         style={{ flex: 1, marginBottom: 10, width: '100%' }} 
         showsVerticalScrollIndicator={false}
       >
-        {chatMessages.map((msg) => {
-          const isMe = msg.senderRole === currentUserRole;
-          const isSystem = msg.senderRole === 'sistema';
-          
-          return (
-            <View 
-              key={msg.id} 
-              style={{
-                alignSelf: isSystem ? 'center' : (isMe ? 'flex-end' : 'flex-start'),
-                backgroundColor: isSystem ? '#EFF6FF' : (isMe ? '#3B82F6' : '#F3F4F6'),
-                padding: 10,
-                borderRadius: 12,
-                marginBottom: 8,
-                maxWidth: '85%'
-              }}
-            >
-              <Text style={{ color: isSystem ? '#2563EB' : (isMe ? '#FFF' : '#333'), fontSize: 14 }}>
-                {msg.text}
+        {chatMessages.map((msg) => (
+          <View 
+            key={msg.id} 
+            style={{
+              alignSelf: isSystem(msg) ? 'center' : (isMe(msg) ? 'flex-end' : 'flex-start'),
+              backgroundColor: isSystem(msg) ? '#FFF3CD' : (isMe(msg) ? primaryColor : '#EAECEE'),
+              padding: 10,
+              borderRadius: 12,
+              marginBottom: 8,
+              maxWidth: '85%'
+            }}
+          >
+            {!isSystem(msg) && currentUserRole === 'operador' && (
+              <Text style={{ fontSize: 10, fontWeight: 'bold', color: isMe(msg) ? '#D4E6F1' : '#7F8C8D', marginBottom: 2 }}>
+                {isMe(msg) ? 'Eu (Operador)' : 'Vítima'}
               </Text>
-            </View>
-          );
-        })}
+            )}
+            <Text style={{ color: isSystem(msg) ? '#856404' : (isMe(msg) ? '#FFF' : '#333'), fontSize: 14 }}>
+              {msg.text}
+            </Text>
+          </View>
+        ))}
       </ScrollView>
 
-      {/* Área de Input */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, borderTopWidth: 1, borderTopColor: '#EFF6FF', paddingTop: 10, width: '100%' }}>
+      {/* Input */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, borderTopWidth: 1, borderTopColor: '#EEEEEE', paddingTop: 10, width: '100%' }}>
         <TextInput
-          style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 20, paddingHorizontal: 15, height: 40 }}
+          style={{ flex: 1, backgroundColor: '#F4F6F7', borderWidth: 1, borderColor: '#D5DBDB', borderRadius: 20, paddingHorizontal: 15, height: 40 }}
           placeholder="Escreva aqui..."
           value={chatInput}
           onChangeText={setChatInput}
         />
         <TouchableOpacity 
-          style={{ marginLeft: 10, backgroundColor: '#3B82F6', borderRadius: 20, paddingHorizontal: 18, height: 40, justifyContent: 'center' }}
+          style={{ marginLeft: 10, backgroundColor: primaryColor, borderRadius: 20, paddingHorizontal: 18, height: 40, justifyContent: 'center' }}
           onPress={handleSendMessage}
         >
           <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Enviar</Text>

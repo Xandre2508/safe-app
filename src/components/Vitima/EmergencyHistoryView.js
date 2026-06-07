@@ -1,13 +1,11 @@
 import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '../../firebaseConfig';
+import { auth, db } from '../../firebaseConfig'; // Ajusta o caminho se necessário
 
 export default function EmergencyHistoryView() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Estado para controlar qual o filtro selecionado
   const [activeFilter, setActiveFilter] = useState('todos');
 
   useEffect(() => {
@@ -15,19 +13,21 @@ export default function EmergencyHistoryView() {
       if (!auth.currentUser) return;
 
       try {
-        const q = query(
-          collection(db, 'sos_requests'),
-          where('userId', '==', auth.currentUser.uid),
-          orderBy('timestamp', 'desc')
-        );
+        // 1. Criar as queries para ambas as coleções
+        const qSOS = query(collection(db, 'sos_requests'), where('userId', '==', auth.currentUser.uid));
+        const qMant = query(collection(db, 'pedidos_mantimentos'), where('userId', '==', auth.currentUser.uid));
 
-        const querySnapshot = await getDocs(q);
-        const fetchedHistory = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        // 2. Buscar dados em paralelo
+        const [sosSnapshot, mantSnapshot] = await Promise.all([getDocs(qSOS), getDocs(qMant)]);
 
-        setHistory(fetchedHistory);
+        // 3. Mapear e adicionar um campo 'tipo' para distinguir
+        const sosData = sosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), tipo: 'sos' }));
+        const mantData = mantSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), tipo: 'mantimento' }));
+
+        // 4. Juntar e ordenar por data
+        const combined = [...sosData, ...mantData].sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
+
+        setHistory(combined);
       } catch (error) {
         console.error("Erro ao carregar histórico:", error);
       } finally {
@@ -40,26 +40,15 @@ export default function EmergencyHistoryView() {
 
   const formatDate = (timestamp) => {
     if (!timestamp) return 'Data desconhecida';
-    const date = timestamp.toDate();
-    return date.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return timestamp.toDate().toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  // Lógica que filtra a lista original baseada no botão selecionado
   const filteredHistory = history.filter(item => {
     if (activeFilter === 'todos') return true;
+    if (activeFilter === 'mantimento') return item.tipo === 'mantimento';
     return item.status === activeFilter;
   });
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#FF3B30" />
-        <Text style={styles.loadingText}>A carregar histórico...</Text>
-      </View>
-    );
-  }
-
-  // Define as cores consoante o estado do pedido
   const getStatusStyle = (status) => {
     switch(status) {
       case 'pendente': return styles.statusPendente;
@@ -73,23 +62,15 @@ export default function EmergencyHistoryView() {
     <View style={styles.container}>
       <Text style={styles.title}>Histórico de Alertas</Text>
       
-      {/* Barra de Filtros Horizontal */}
       <View style={{ marginBottom: 15 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContainer}>
-          {['todos', 'pendente', 'concluido', 'cancelado'].map((filterType) => (
+          {['todos', 'mantimento', 'pendente', 'concluido', 'cancelado'].map((filterType) => (
             <TouchableOpacity
               key={filterType}
-              style={[
-                styles.filterChip,
-                activeFilter === filterType && styles.filterChipActive
-              ]}
+              style={[styles.filterChip, activeFilter === filterType && styles.filterChipActive]}
               onPress={() => setActiveFilter(filterType)}
             >
-              <Text style={[
-                styles.filterText,
-                activeFilter === filterType && styles.filterTextActive
-              ]}>
-                {/* Coloca a primeira letra em maiúscula */}
+              <Text style={[styles.filterText, activeFilter === filterType && styles.filterTextActive]}>
                 {filterType.charAt(0).toUpperCase() + filterType.slice(1)}
               </Text>
             </TouchableOpacity>
@@ -97,9 +78,8 @@ export default function EmergencyHistoryView() {
         </ScrollView>
       </View>
       
-      {/* Renderizar a lista 'filteredHistory' em vez da original */}
       {filteredHistory.length === 0 ? (
-        <Text style={styles.emptyText}>Não tem pedidos de socorro neste estado.</Text>
+        <Text style={styles.emptyText}>Não tem pedidos neste estado.</Text>
       ) : (
         filteredHistory.map((item) => (
           <View key={item.id} style={styles.card}>
@@ -109,9 +89,13 @@ export default function EmergencyHistoryView() {
                 {item.status.toUpperCase()}
               </Text>
             </View>
-            <Text style={styles.details}>
-              Idade: {item.detalhes?.idade || 'N/A'} | Crianças: {item.detalhes?.criancas ? 'Sim' : 'Não'}
-            </Text>
+            
+            {/* Renderização condicional dos detalhes */}
+            {item.tipo === 'mantimento' ? (
+              <Text style={styles.details}>📦 Pedido: {item.detalhes?.descricao} | Qtd: {item.detalhes?.quantidade}</Text>
+            ) : (
+              <Text style={styles.details}>🎂 Idade: {item.detalhes?.idade || 'N/A'} | Crianças: {item.detalhes?.criancas ? 'Sim' : 'Não'}</Text>
+            )}
           </View>
         ))
       )}
