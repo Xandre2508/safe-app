@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { Alert, FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
-import * as Notifications from 'expo-notifications'; // NOVO: Motor de Notificações
+import * as Notifications from 'expo-notifications'; 
 
 import { auth, db } from '../../src/firebaseConfig';
 import { styles } from '../styles/OperatorDashboardStyles';
@@ -24,19 +24,18 @@ Notifications.setNotificationHandler({
 
 export default function OperatorDashboard({ navigation }) {
   // --- ESTADOS ---
-  const [activeTab, setActiveTab] = useState('sos'); // 'sos' | 'radio'
+  const [activeTab, setActiveTab] = useState('sos'); 
   const [todasOcorrencias, setTodasOcorrencias] = useState([]);
   const [selectedIncidentId, setSelectedIncidentId] = useState(null);
   const [socorristas, setSocorristas] = useState([]);
   const [selectedRescuer, setSelectedRescuer] = useState(null);
 
-  // --- REFS (Para controlo de Notificações sem causar re-renders) ---
+  // --- REFS (Para controlo de Notificações) ---
   const isFirstLoadSOS = useRef(true);
   const isFirstLoadRadio = useRef(true);
   const currentTabRef = useRef(activeTab);
   const currentRescuerRef = useRef(selectedRescuer);
 
-  // Mantém as Refs atualizadas com o estado atual
   useEffect(() => { currentTabRef.current = activeTab; }, [activeTab]);
   useEffect(() => { currentRescuerRef.current = selectedRescuer; }, [selectedRescuer]);
 
@@ -53,13 +52,30 @@ export default function OperatorDashboard({ navigation }) {
     requestPermissions();
   }, []);
 
-  // --- EFEITO 2: Ocorrências SOS (Com Gatilho de Notificação) ---
+  // --- EFEITO 2: Ocorrências SOS e Mantimentos (Unificados) ---
   useFocusEffect(
     useCallback(() => {
-      const q = query(collection(db, 'sos_requests'));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
+      const qSOS = query(collection(db, 'sos_requests'));
+      const qMantimentos = query(collection(db, 'pedidos_mantimentos'));
+
+      let cacheSOS = [];
+      let cacheMantimentos = [];
+
+      const updateAllIncidents = () => {
+        let combined = [...cacheSOS, ...cacheMantimentos];
         
-        // 1. Lógica de Notificações (Ignora o load inicial para não fazer spam)
+        combined.sort((a, b) => {
+          if (a.status === 'pendente' && b.status !== 'pendente') return -1;
+          if (a.status !== 'pendente' && b.status === 'pendente') return 1;
+          const timeA = a.timestamp?.toMillis() || 0;
+          const timeB = b.timestamp?.toMillis() || 0;
+          return timeB - timeA;
+        });
+        
+        setTodasOcorrencias(combined);
+      };
+
+      const handleSnapshot = (snapshot, typeName) => {
         if (!isFirstLoadSOS.current) {
           snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
@@ -67,8 +83,8 @@ export default function OperatorDashboard({ navigation }) {
               if (data.status === 'pendente') {
                 Notifications.scheduleNotificationAsync({
                   content: {
-                    title: '🚨 NOVO ALERTA SOS',
-                    body: `Emergência reportada por ${data.userName || 'Vítima'}. Responda imediatamente!`,
+                    title: typeName === 'SOS' ? '🚨 NOVO ALERTA SOS' : '📦 NOVO PEDIDO MANTIMENTOS',
+                    body: `${typeName} reportado por ${data.userName || 'Vítima'}.`,
                     sound: true,
                   },
                   trigger: null,
@@ -78,21 +94,23 @@ export default function OperatorDashboard({ navigation }) {
           });
         }
 
-        // 2. Atualização normal da lista
-        let requests = [];
-        snapshot.forEach((doc) => requests.push({ id: doc.id, ...doc.data() }));
-        requests.sort((a, b) => {
-          if (a.status === 'pendente' && b.status !== 'pendente') return -1;
-          if (a.status !== 'pendente' && b.status === 'pendente') return 1;
-          return 0; 
-        });
-        
-        setTodasOcorrencias(requests);
-        
-        // Desliga a flag de load inicial
+        const list = [];
+        snapshot.forEach((doc) => list.push({ id: doc.id, tipoAlerta: typeName, ...doc.data() }));
+        return list;
+      };
+
+      const unsubSOS = onSnapshot(qSOS, (snapshot) => {
+        cacheSOS = handleSnapshot(snapshot, 'SOS');
+        updateAllIncidents();
         if (isFirstLoadSOS.current) isFirstLoadSOS.current = false;
       });
-      return () => unsubscribe();
+
+      const unsubMant = onSnapshot(qMantimentos, (snapshot) => {
+        cacheMantimentos = handleSnapshot(snapshot, 'MANTIMENTO');
+        updateAllIncidents();
+      });
+
+      return () => { unsubSOS(); unsubMant(); };
     }, [])
   );
 
@@ -107,11 +125,10 @@ export default function OperatorDashboard({ navigation }) {
     return () => unsubscribe();
   }, []);
 
-  // --- EFEITO 4: Notificações de Rádio (Ouve todos os socorristas ativos) ---
+  // --- EFEITO 4: Notificações de Rádio ---
   useEffect(() => {
     if (socorristas.length === 0) return;
 
-    // Cria um listener para o chat de cada socorrista
     const unsubscribes = socorristas.map((socorrista) => {
       const qMsg = query(collection(db, 'operator_rescuer_chats', socorrista.id, 'messages'), orderBy('timestamp', 'desc'), limit(1));
       
@@ -120,8 +137,6 @@ export default function OperatorDashboard({ navigation }) {
           snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
               const msgData = change.doc.data();
-              
-              // Só notifica se a mensagem for do socorrista E o operador não estiver a olhar para o chat dele
               const isLookingAtThisRescuer = currentTabRef.current === 'radio' && currentRescuerRef.current?.id === socorrista.id;
               
               if (msgData.senderRole === 'socorrista' && !isLookingAtThisRescuer) {
@@ -140,14 +155,11 @@ export default function OperatorDashboard({ navigation }) {
       });
     });
 
-    // Timeout ligeiro para garantir que os dados antigos carregaram antes de ativar o gatilho de notificações
     setTimeout(() => { isFirstLoadRadio.current = false; }, 1000);
-
-    // Limpeza de todos os listeners quando o ecrã for desmontado
     return () => unsubscribes.forEach(unsub => unsub());
   }, [socorristas]);
 
-  // --- ACÕES ---
+  // --- AÇÕES ---
   const handleLogout = () => {
     Alert.alert("Terminar Sessão", "Tens a certeza que queres sair da central?", [
       { text: "Cancelar", style: "cancel" },
@@ -174,7 +186,7 @@ export default function OperatorDashboard({ navigation }) {
                 onPress={() => setActiveTab('sos')}
               >
                 <Text style={[styles.navTabText, activeTab === 'sos' && styles.navTabTextActive]}>
-                  🚨 SOS ({pendingCount})
+                  🚨 Alertas ({pendingCount})
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity 
@@ -199,7 +211,7 @@ export default function OperatorDashboard({ navigation }) {
       {/* ÁREA DE CONTEÚDO */}
       <View style={(!selectedIncidentId && !selectedRescuer) ? styles.contentPadding : { flex: 1 }}>
         
-        {/* ABA: SOS */}
+        {/* ABA: SOS & MANTIMENTOS */}
         {activeTab === 'sos' && (
           <>
             {!selectedIncidentId ? (

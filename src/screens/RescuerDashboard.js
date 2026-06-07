@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import BottomSheet, { BottomSheetScrollView, BottomSheetView } from '@gorhom/bottom-sheet';
+// 1. IMPORTAÇÃO DO BOTÃO ESPECIAL (GorhomTouchableOpacity)
+import BottomSheet, { BottomSheetScrollView, BottomSheetView, TouchableOpacity as GorhomTouchableOpacity } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { collection, doc, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
@@ -97,23 +98,54 @@ export default function RescuerDashboard({ navigation }) {
 
   useEffect(() => {
     if (!location) return;
-    const q = query(collection(db, 'sos_requests'), where('status', '==', 'pendente'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let requests = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
+    
+    // Query para SOS e Mantimentos
+    const qSOS = query(collection(db, 'sos_requests'), where('status', '==', 'pendente'));
+    const qMantimentos = query(collection(db, 'pedidos_mantimentos'), where('status', '==', 'pendente'));
+
+    // Variáveis para guardar as listas temporárias
+    let pendingSOS = [];
+    let pendingMant = [];
+
+    // Função para juntar, calcular distância, ordenar e definir missão
+    const processRequests = () => {
+      let combinedRequests = [];
+
+      // Processa SOS
+      pendingSOS.forEach((data) => {
         const distance = getDistanceKm(location.latitude, location.longitude, data.latitude, data.longitude);
-        if (distance <= 50) requests.push({ id: doc.id, distance, ...data });
+        if (distance <= 50) combinedRequests.push({ ...data, distance, tipoAlerta: 'SOS' });
       });
-      requests.sort((a, b) => {
-        const weightA = getPriorityWeight(a.detalhes);
-        const weightB = getPriorityWeight(b.detalhes);
+
+      // Processa Mantimentos
+      pendingMant.forEach((data) => {
+        const distance = getDistanceKm(location.latitude, location.longitude, data.latitude, data.longitude);
+        if (distance <= 50) combinedRequests.push({ ...data, distance, tipoAlerta: 'MANTIMENTO' });
+      });
+
+      // Ordena por Prioridade -> Depois Distância
+      combinedRequests.sort((a, b) => {
+        let weightA = a.tipoAlerta === 'SOS' ? getPriorityWeight(a.detalhes) : (a.detalhes?.urgente ? 2 : 4);
+        let weightB = b.tipoAlerta === 'SOS' ? getPriorityWeight(b.detalhes) : (b.detalhes?.urgente ? 2 : 4);
+        
         return weightA !== weightB ? weightA - weightB : a.distance - b.distance; 
       });
-      setActiveRequests(requests);
-      setCurrentMission(requests.length > 0 ? requests[0] : null);
+
+      setActiveRequests(combinedRequests);
+      setCurrentMission(combinedRequests.length > 0 ? combinedRequests[0] : null);
+    };
+
+    const unsubSOS = onSnapshot(qSOS, (snapshot) => {
+      pendingSOS = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      processRequests();
     });
-    return () => unsubscribe();
+
+    const unsubMant = onSnapshot(qMantimentos, (snapshot) => {
+      pendingMant = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      processRequests();
+    });
+
+    return () => { unsubSOS(); unsubMant(); };
   }, [location]); 
 
   const toggleChat = () => {
@@ -127,10 +159,19 @@ export default function RescuerDashboard({ navigation }) {
 
   const handleCompleteMission = async () => {
     if (!currentMission) return;
-    Alert.alert("Concluir Resgate", "Confirmar que a missão está terminada?", [
+    
+    Alert.alert("Concluir Missão", "Confirmar que a missão está terminada?", [
       { text: "Cancelar", style: "cancel" },
       { text: "Sim, Concluído", onPress: async () => {
-          await updateDoc(doc(db, 'sos_requests', currentMission.id), { status: 'concluido' });
+          try {
+            // Verifica de qual coleção veio o alerta para atualizar no sítio certo
+            const colecao = currentMission.tipoAlerta === 'MANTIMENTO' ? 'pedidos_mantimentos' : 'sos_requests';
+            
+            await updateDoc(doc(db, colecao, currentMission.id), { status: 'concluido' });
+          } catch (error) {
+            Alert.alert("Erro", "Ocorreu um erro ao tentar concluir a missão.");
+            console.log(error);
+          }
         }
       }
     ]);
@@ -147,6 +188,7 @@ export default function RescuerDashboard({ navigation }) {
     <View style={styles.container}>
       <SafeAreaView style={styles.navBarContainer}>
         <View style={styles.navBar}>
+          {/* Aqui mantemos o botão normal porque está FORA do BottomSheet */}
           <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('ProfileScreen')}>
             <Ionicons name="person-circle-outline" size={28} color="#4B5563" />
             <Text style={styles.navButtonText}>Perfil</Text>
@@ -194,7 +236,7 @@ export default function RescuerDashboard({ navigation }) {
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>Resgate Prioritário:</Text>
+                <Text style={styles.sectionTitle}>Missão Ativa {currentMission ? `(${currentMission.tipoAlerta})` : ''}:</Text>
                 {currentMission ? (
                   <>
                     <Text style={styles.highlightDistance}>📍 {currentMission.distance.toFixed(1)} km</Text>
@@ -204,17 +246,22 @@ export default function RescuerDashboard({ navigation }) {
                       <View style={styles.priorityBox}>
                         <Text style={styles.priorityText}>
                           🚨 PRIORIDADE: 
-                          {currentMission.detalhes.criancas ? " CRIANÇAS PRESENTES" : 
-                           currentMission.detalhes.gravida ? " GRÁVIDA" : 
-                           parseInt(currentMission.detalhes.idade) > 65 ? " IDOSO" : " NORMAL"}
+                          {/* 2. CORREÇÃO DA CAIXA DE PRIORIDADE */}
+                          {currentMission.tipoAlerta === 'SOS' 
+                            ? (currentMission.detalhes.criancas ? " CRIANÇAS PRESENTES" : 
+                               currentMission.detalhes.gravida ? " GRÁVIDA" : 
+                               parseInt(currentMission.detalhes.idade) > 65 ? " IDOSO" : " NORMAL")
+                            : (currentMission.detalhes.urgente ? " URGENTE" : " NORMAL")
+                          }
                         </Text>
                       </View>
                     )}
 
-                    <TouchableOpacity style={styles.completeButton} onPress={handleCompleteMission}>
+                    {/* 3. BOTÃO ESPECIAL PARA FUNCIONAR NO ANDROID */}
+                    <GorhomTouchableOpacity style={styles.completeButton} onPress={handleCompleteMission}>
                       <Ionicons name="checkmark-circle" size={20} color="#FFF" style={{ marginRight: 6 }} />
                       <Text style={styles.completeButtonText}>Marcar Concluído</Text>
-                    </TouchableOpacity>
+                    </GorhomTouchableOpacity>
                   </>
                 ) : (
                   <Text style={styles.listItem}>Nenhuma ocorrência.</Text>
@@ -224,10 +271,13 @@ export default function RescuerDashboard({ navigation }) {
           ) : (
             <View style={[styles.contentSection, { flex: 1, paddingBottom: 0 }]}>
               <View style={styles.chatHeader}>
-                <TouchableOpacity onPress={toggleChat} style={styles.backButton}>
+                
+                {/* BOTÃO ESPECIAL AQUI TAMBÉM */}
+                <GorhomTouchableOpacity onPress={toggleChat} style={styles.backButton}>
                   <Ionicons name="arrow-back" size={22} color="#1F2937" />
                   <Text style={styles.backButtonText}>Recolher Rádio</Text>
-                </TouchableOpacity>
+                </GorhomTouchableOpacity>
+
               </View>
               
               <RescuerChatView currentUserId={auth.currentUser?.uid} />
