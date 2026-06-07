@@ -1,9 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where, orderBy, limit } from 'firebase/firestore'; // NOVO: orderBy e limit
-import { useEffect, useState, useRef } from 'react'; // NOVO: useRef
+import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where, orderBy, limit } from 'firebase/firestore'; 
+import { useEffect, useState, useRef } from 'react'; 
 import { Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-maps';
-import * as Notifications from 'expo-notifications'; // NOVO: Notificações Push
+import * as Notifications from 'expo-notifications'; 
 
 // Importação das configurações e constantes
 import { auth, db } from '../../src/firebaseConfig';
@@ -41,11 +41,12 @@ export default function VictimDashboard({ navigation }) {
   const [showMantimentosForm, setShowMantimentosForm] = useState(false); 
   
   const [isEmergencyMinimized, setIsEmergencyMinimized] = useState(false);
-  // NOVO: Ref para as notificações saberem o estado do chat em tempo real sem causar re-renders
-  const isMinimizedRef = useRef(isEmergencyMinimized); 
-
-  const [userName, setUserName] = useState(''); 
   const [activeSosId, setActiveSosId] = useState(null); 
+  const [userName, setUserName] = useState(''); 
+
+  // Refs para ler estado dentro dos listeners do Firebase sem causar re-renders/loops
+  const isMinimizedRef = useRef(isEmergencyMinimized); 
+  const activeSosIdRef = useRef(activeSosId);
 
   // Estados do SOS
   const [idade, setIdade] = useState('');
@@ -57,12 +58,16 @@ export default function VictimDashboard({ navigation }) {
   const [quantidade, setQuantidade] = useState('');
   const [urgente, setUrgente] = useState(false);
 
-  // NOVO 1: Sincroniza o estado Minimizado com a Ref
+  // Sincroniza os estados com as Refs
   useEffect(() => {
     isMinimizedRef.current = isEmergencyMinimized;
   }, [isEmergencyMinimized]);
 
-  // NOVO 2: Pede permissão para Notificações ao abrir a app
+  useEffect(() => {
+    activeSosIdRef.current = activeSosId;
+  }, [activeSosId]);
+
+  // Pede permissão para Notificações ao abrir a app
   useEffect(() => {
     const requestNotificationPermissions = async () => {
       const { status } = await Notifications.requestPermissionsAsync();
@@ -94,29 +99,31 @@ export default function VictimDashboard({ navigation }) {
     
     const q = query(collection(db, 'sos_requests'), where('userId', '==', auth.currentUser.uid));
 
+    // O listener agora regista-se apenas UMA VEZ na montagem do componente
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const pendingRequest = snapshot.docs.find(doc => doc.data().status === 'pendente');
       
       if (pendingRequest) {
-        if (pendingRequest.id !== activeSosId) {
+        // Usa a Ref para comparar, evitando o loop do listener
+        if (pendingRequest.id !== activeSosIdRef.current) {
             setActiveSosId(pendingRequest.id);
             setIsEmergencyMinimized(false);
         }
       } else {
-        setActiveSosId((prevId) => {
-          if (prevId) {
-            const completedDoc = snapshot.docs.find(doc => doc.id === prevId && doc.data().status === 'concluido');
-            if (completedDoc) Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
+        if (activeSosIdRef.current) {
+          const completedDoc = snapshot.docs.find(doc => doc.id === activeSosIdRef.current && doc.data().status === 'concluido');
+          if (completedDoc) {
+            Alert.alert("Resgate Concluído ✅", "O operador encerrou a ocorrência. Mantém-te em segurança.");
           }
-          return null; 
-        });
+          setActiveSosId(null); 
+        }
       }
     });
 
     return () => unsubscribe();
-  }, [activeSosId]);
+  }, []); // Array de dependências vazio: não re-subscrevemos o onSnapshot a cada alteração de estado.
 
-  // NOVO 3: MOTOR DE NOTIFICAÇÕES (Escuta mensagens da Central)
+  // --- MOTOR DE NOTIFICAÇÕES (Escuta mensagens da Central) ---
   useEffect(() => {
     if (!activeSosId) return;
 
@@ -131,7 +138,6 @@ export default function VictimDashboard({ navigation }) {
         if (change.type === 'added') {
           const msgData = change.doc.data();
           
-          // Se a mensagem foi enviada pelo Operador E a vítima tem o chat minimizado -> Notifica!
           if (msgData.senderRole === 'operador' && isMinimizedRef.current) {
             Notifications.scheduleNotificationAsync({
               content: {
@@ -139,7 +145,7 @@ export default function VictimDashboard({ navigation }) {
                 body: msgData.text,
                 sound: true,
               },
-              trigger: null, // trigger null significa notificar instantaneamente
+              trigger: null, 
             });
           }
         }
@@ -256,18 +262,6 @@ export default function VictimDashboard({ navigation }) {
       <View style={styles.mapContainer}>
         {location && <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />}
       </View>
-      {/* TRUQUE 1: Usar undefined no Android e adicionar keyboardVerticalOffset para o iOS */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          /* TRUQUE 2: O paddingBottom no contentContainerStyle cria o espaço extra no fundo */
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 300 }}
-        >
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView style={styles.bottomSection} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -355,28 +349,6 @@ export default function VictimDashboard({ navigation }) {
                </TouchableOpacity>
             </View>
           )}
-
-                 {/* BOTÃO DE VOLTAR AO MAPA */}
-                 <TouchableOpacity style={styles.btnBackHistory} onPress={() => setShowHistory(false)}>
-                   <Ionicons name="arrow-back" size={20} color="#FFFFFF" style={styles.btnBackHistoryIcon} />
-                   <Text style={styles.btnBackHistoryText}>Voltar ao Mapa</Text>
-                 </TouchableOpacity>
-
-              </View>
-            )}
-
-            {/* BOTÃO DE SAIR DA CONTA */}
-            {!showHistory && (
-              <TouchableOpacity
-                style={styles.logoutButton}
-                onPress={() => navigation.navigate('Login')}
-              >
-                <Text style={styles.logoutButtonText}>Sair da Conta</Text>
-              </TouchableOpacity>
-            )}
-
-          </View>
-          {/* FIM DA BOTTOM SECTION */}
 
         </ScrollView>
       </KeyboardAvoidingView>
