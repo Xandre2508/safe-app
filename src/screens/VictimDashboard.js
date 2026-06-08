@@ -269,51 +269,51 @@ export default function VictimDashboard({ navigation }) {
   const isChatOpen = (activeSosId || activeMantimentoId) && !isEmergencyMinimized;
 
   return (
-    <SafeAreaView style={styles.container}>
+  <SafeAreaView style={styles.container}>
+    {/* ÁREA DE RENDERIZAÇÃO PRINCIPAL (Menus, Chats e Formulários) */}
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <ScrollView 
+        style={styles.bottomSection} 
+        showsVerticalScrollIndicator={false} 
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 100 }} // O paddingBottom de 100 impede a Navbar de tapar o conteúdo!
+      >
+        
+        {/* MAPA - Movido para dentro da ScrollView */}
+        {/* Encolhe dinamicamente se o chat estiver aberto para dar espaço ao teclado */}
+        <View style={[styles.mapContainer, isChatOpen && { flex: 0, height: 150 }]}>
+          {location && <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />}
+        </View>
 
-      {/* MAPA - Encolhe dinamicamente se o chat estiver aberto para dar espaço ao teclado */}
-      <View style={[styles.mapContainer, isChatOpen && { flex: 0, height: 150 }]}>
-        {location && <MapView style={styles.map} showsUserLocation={true} showsMyLocationButton={true} region={location} />}
-      </View>
-
-      {/* ÁREA DE RENDERIZAÇÃO PRINCIPAL (Menus, Chats e Formulários) */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView 
-          style={styles.bottomSection} 
-          showsVerticalScrollIndicator={false} 
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 100 }} // O paddingBottom de 100 é o que impede a Navbar de tapar o conteúdo!
-        >
-          
-          {/* VISTA INICIAL (Sem forms ou chats abertos) */}
-          {!showDetailsForm && !showMantimentosForm && !isChatOpen && !showHistory && (
-            <View>
-              <InitialActionButtons setShowDetailsForm={setShowDetailsForm} setShowMantimentosForm={setShowMantimentosForm} />
-              
-              {/* Botão para maximizar o chat consoante o tipo ativo */}
-              {(activeSosId || activeMantimentoId) && isEmergencyMinimized && (
-                <TouchableOpacity 
-                  style={{ backgroundColor: activeSosId ? '#EF4444' : '#3B82F6', padding: 15, borderRadius: 12, width: '90%', alignSelf: 'center', marginTop: 10 }} 
-                  onPress={() => setIsEmergencyMinimized(false)}
-                >
-                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>
-                    {activeSosId ? '🚨 SOS ATIVO - ABRIR CHAT' : '📦 MANTIMENTOS - ABRIR CHAT'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Botão de Histórico */}
-              <TouchableOpacity style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, alignSelf: 'center', marginTop: 10, marginBottom: 20, width: '90%', flexDirection: 'row', alignItems: 'center' }} onPress={() => setShowHistory(true)}>
-                <MaterialCommunityIcons name="clipboard-text-clock-outline" size={26} color="#3B82F6" />
-                <Text style={{ fontSize: 16, fontWeight: '700', marginLeft: 10 }}>Histórico de Alertas</Text>
+        {/* VISTA INICIAL (Sem forms ou chats abertos) */}
+        {!showDetailsForm && !showMantimentosForm && !isChatOpen && !showHistory && (
+          <View>
+            <InitialActionButtons setShowDetailsForm={setShowDetailsForm} setShowMantimentosForm={setShowMantimentosForm} />
+            
+            {/* Botão para maximizar o chat consoante o tipo ativo */}
+            {(activeSosId || activeMantimentoId) && isEmergencyMinimized && (
+              <TouchableOpacity 
+                style={{ backgroundColor: activeSosId ? '#EF4444' : '#3B82F6', padding: 15, borderRadius: 12, width: '90%', alignSelf: 'center', marginTop: 10 }} 
+                onPress={() => setIsEmergencyMinimized(false)}
+              >
+                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>
+                  {activeSosId ? '🚨 SOS ATIVO - ABRIR CHAT' : '📦 MANTIMENTOS - ABRIR CHAT'}
+                </Text>
               </TouchableOpacity>
+            )}
 
-              <NewsSection news={news} loadingNews={loadingNews} />
-            </View>
-          )}
+            {/* Botão de Histórico */}
+            <TouchableOpacity style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, alignSelf: 'center', marginTop: 10, marginBottom: 20, width: '90%', flexDirection: 'row', alignItems: 'center' }} onPress={() => setShowHistory(true)}>
+              <MaterialCommunityIcons name="clipboard-text-clock-outline" size={26} color="#3B82F6" />
+              <Text style={{ fontSize: 16, fontWeight: '700', marginLeft: 10 }}>Histórico de Alertas</Text>
+            </TouchableOpacity>
 
-          {/* FORMULÁRIO DE SOS */}
-          {showDetailsForm && (
+            <NewsSection news={news} loadingNews={loadingNews} />
+          </View>
+        )}
+
+        {/* FORMULÁRIO DE SOS */}
+        {showDetailsForm && (
           <SOSDetailsForm 
             idade={idade}
             setIdade={setIdade} 
@@ -327,86 +327,87 @@ export default function VictimDashboard({ navigation }) {
           />
         )}
           
-          {/* FORMULÁRIO DE MANTIMENTOS */}
-          {showMantimentosForm && (
-            <MantimentosDetailsForm 
-              descricao={descricao} 
-              setDescricao={setDescricao}
-              quantidade={quantidade} 
-              setQuantidade={setQuantidade}
-              handleConfirmMantimentos={handleConfirmMantimentos} 
-              setShowMantimentosForm={setShowMantimentosForm} 
-            />
-          )}
+        {/* FORMULÁRIO DE MANTIMENTOS */}
+        {showMantimentosForm && (
+          <MantimentosDetailsForm 
+            descricao={descricao} 
+            setDescricao={setDescricao}
+            quantidade={quantidade} 
+            setQuantidade={setQuantidade}
+            handleConfirmMantimentos={handleConfirmMantimentos} 
+            setShowMantimentosForm={setShowMantimentosForm} 
+          />
+        )}
 
-          {/* CHAT DE SOS (Prioridade sobre mantimentos se ambos existissem) */}
-          {activeSosId && !isEmergencyMinimized && (
-            <ActiveEmergencyView 
-              activeSosId={activeSosId}
-              currentUserId={auth.currentUser?.uid} 
-              handleCancelSOS={handleCancelSOS}
-              onMinimize={() => setIsEmergencyMinimized(true)} 
-            />
-          )}
+        {/* CHAT DE SOS (Prioridade sobre mantimentos se ambos existissem) */}
+        {activeSosId && !isEmergencyMinimized && (
+          <ActiveEmergencyView 
+            activeSosId={activeSosId}
+            currentUserId={auth.currentUser?.uid} 
+            handleCancelSOS={handleCancelSOS}
+            onMinimize={() => setIsEmergencyMinimized(true)} 
+          />
+        )}
 
-          {/* CHAT DE MANTIMENTOS (Só abre se não houver SOS ativo) */}
-          {activeMantimentoId && !activeSosId && !isEmergencyMinimized && (
-            <ActiveMantimentosView 
-              activePedidoId={activeMantimentoId}
-              currentUserId={auth.currentUser?.uid} 
-              handleCancelPedido={handleCancelMantimento}
-              onMinimize={() => setIsEmergencyMinimized(true)} 
-            />
-          )}
+        {/* CHAT DE MANTIMENTOS (Só abre se não houver SOS ativo) */}
+        {activeMantimentoId && !activeSosId && !isEmergencyMinimized && (
+          <ActiveMantimentosView 
+            activePedidoId={activeMantimentoId}
+            currentUserId={auth.currentUser?.uid} 
+            handleCancelPedido={handleCancelMantimento}
+            onMinimize={() => setIsEmergencyMinimized(true)} 
+          />
+        )}
 
-          {/* HISTÓRICO DE ALERTAS */}
-          {showHistory && (
-            <View>
-               <EmergencyHistoryView />
-               <TouchableOpacity style={{ padding: 16, alignItems: 'center', backgroundColor: '#4B5563', borderRadius: 12, margin: 20 }} onPress={() => setShowHistory(false)}>
-                 <Text style={{ color: '#FFF' }}>Voltar ao Mapa</Text>
-               </TouchableOpacity>
-            </View>
-          )}
+        {/* HISTÓRICO DE ALERTAS */}
+        {showHistory && (
+          <View>
+             <EmergencyHistoryView />
+             <TouchableOpacity style={{ padding: 16, alignItems: 'center', backgroundColor: '#4B5563', borderRadius: 12, margin: 20 }} onPress={() => setShowHistory(false)}>
+               <Text style={{ color: '#FFF' }}>Voltar ao Mapa</Text>
+             </TouchableOpacity>
+          </View>
+        )}
 
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </ScrollView>
+    </KeyboardAvoidingView>
 
-      {/* NAVBAR INFERIOR FIXA */}
-      <View style={{
-        position: 'absolute', 
-        bottom: 0,
-        width: '100%',
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        paddingTop: 12,
-        paddingBottom: Platform.OS === 'ios' ? 35 : 15, 
-        borderTopWidth: 1,
-        borderTopColor: '#E5E7EB',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        elevation: 15,
-        zIndex: 999, 
-      }}>
-        <TouchableOpacity onPress={() => navigation.navigate('ProfileScreen')} style={{ alignItems: 'center' }}>
-            <Ionicons name="person-outline" size={24} color="#6B7280" />
-            <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Perfil</Text>
-        </TouchableOpacity>
+    {/* NAVBAR INFERIOR FIXA */}
+    <View style={{
+      position: 'absolute', 
+      bottom: 0,
+      width: '100%',
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      backgroundColor: '#FFFFFF',
+      paddingTop: 12,
+      paddingBottom: Platform.OS === 'ios' ? 35 : 15, 
+      borderTopWidth: 1,
+      borderTopColor: '#E5E7EB',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -3 },
+      shadowOpacity: 0.1,
+      elevation: 15,
+      zIndex: 999, 
+    }}>
+      <TouchableOpacity onPress={() => navigation.navigate('ProfileScreen')} style={{ alignItems: 'center' }}>
+          <Ionicons name="person-outline" size={24} color="#6B7280" />
+          <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Perfil</Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity onPress={handleGoHome} style={{ alignItems: 'center' }}>
-            <Ionicons name="shield-checkmark" size={26} color="#EF4444" />
-            <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4, fontWeight: '700' }}>S.A.F.E.</Text>
-        </TouchableOpacity>
+      <TouchableOpacity onPress={handleGoHome} style={{ alignItems: 'center' }}>
+          <Ionicons name="shield-checkmark" size={26} color="#EF4444" />
+          <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4, fontWeight: '700' }}>S.A.F.E.</Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity onPress={handleLogout} style={{ alignItems: 'center' }}>
-            <Ionicons name="log-out-outline" size={24} color="#6B7280" />
-            <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Sair</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity onPress={handleLogout} style={{ alignItems: 'center' }}>
+          <Ionicons name="log-out-outline" size={24} color="#6B7280" />
+          <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Sair</Text>
+      </TouchableOpacity>
+    </View>
 
-    </SafeAreaView>
-  );
+  </SafeAreaView>
+);
+
 }
