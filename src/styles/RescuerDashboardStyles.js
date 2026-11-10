@@ -1,25 +1,24 @@
 import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#fff' 
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
-  // Estrutura da Nav Bar Superior
   navBarContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     zIndex: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#E2E8F0',
+    elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 6,
-    elevation: 5,
   },
   navBar: {
     flexDirection: 'row',
@@ -36,7 +35,7 @@ export const styles = StyleSheet.create({
   navButtonText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#4B5563',
+    color: '#475569',
     marginTop: 2,
   },
   navChatButton: {
@@ -62,124 +61,112 @@ export const styles = StyleSheet.create({
   iconBadgeContainer: {
     position: 'relative',
   },
-  chatBadgePulse: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#EF4444',
+  loadingMap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
   },
-  loadingMap: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    backgroundColor: '#E0E0E0' 
+  bottomSheetShadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 16,
   },
-  bottomSheetShadow: { 
-    shadowColor: "#000", 
-    shadowOffset: { width: 0, height: -3 }, 
-    shadowOpacity: 0.15, 
-    shadowRadius: 6, 
-    elevation: 15 
+  contentSection: {
+    padding: 18,
+    paddingBottom: 36,
   },
-  contentSection: { 
-    padding: 20, 
-    paddingBottom: 40 
+  headerButtons: {
+    marginBottom: 14,
   },
-  headerButtons: { 
-    marginBottom: 15 
+  statusBadge: {
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
   },
-  statusBadge: { 
-    padding: 14, 
-    borderRadius: 12, 
-    alignItems: 'center' 
-  },
-  whiteIconText: { 
-    color: '#FFF', 
-    fontSize: 15, 
-    fontWeight: 'bold' 
-  },
-  countText: { 
-    color: '#FFF', 
-    fontSize: 17, 
-    marginTop: 3,
-    fontWeight: '500' 
-  },
-  card: { 
-    backgroundColor: '#F9FAFB', 
-    padding: 16, 
-    borderRadius: 14, 
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#E5E7EB'
-  },
-  sectionTitle: { 
-    fontSize: 18, 
-    fontWeight: 'bold', 
-    marginBottom: 10,
-    color: '#1F2937'
-  },
-  highlightDistance: { 
-    fontSize: 22, 
-    fontWeight: '900', 
-    color: '#111827', 
-    marginBottom: 8 
-  },
-  listItem: { 
-    fontSize: 16, 
-    marginBottom: 5,
-    color: '#4B5563'
-  },
-  priorityBox: { 
-    backgroundColor: '#FEF2F2', 
-    padding: 12, 
-    borderRadius: 10, 
-    marginTop: 10, 
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#FEE2E2'
-  },
-  priorityText: { 
-    color: '#991B1B', 
+  whiteIconText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: 'bold',
-    fontSize: 14
   },
-  completeButton: { 
-    backgroundColor: '#10B981', 
-    padding: 15, 
-    borderRadius: 10, 
-    marginTop: 12, 
+  countText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  card: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#1E293B',
+  },
+  highlightDistance: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  listItem: {
+    fontSize: 15,
+    marginBottom: 4,
+    color: '#475569',
+  },
+  priorityBox: {
+    backgroundColor: '#FEF2F2',
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
+  priorityText: {
+    color: '#991B1B',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  completeButton: {
+    backgroundColor: '#10B981',
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 10,
     flexDirection: 'row',
-    alignItems: 'center', 
-    justifyContent: 'center' 
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
   },
-  completeButtonText: { 
-    color: '#FFF', 
-    fontWeight: 'bold', 
-    fontSize: 16 
+  completeButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 15,
   },
-  chatContainer: { 
-    flex: 1, 
-    minHeight: 400 
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  chatHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 15, 
-    paddingBottom: 10, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#E5E7EB' 
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  backButton: { 
-    flexDirection: 'row', 
-    alignItems: 'center' 
-  },
-  backButtonText: { 
-    marginLeft: 8, 
-    fontSize: 15, 
-    fontWeight: 'bold', 
-    color: '#1F2937' 
+  backButtonText: {
+    marginLeft: 6,
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#1E293B',
   },
 });

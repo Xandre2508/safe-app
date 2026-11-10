@@ -1,92 +1,128 @@
-import * as ImagePicker from 'expo-image-picker';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
-import { auth, db } from '../../src/firebaseConfig';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+
+import { auth, db } from '../firebaseConfig';
 import { styles } from '../styles/ProfileScreenStyles';
 
 export default function ProfileScreen({ navigation }) {
-  // --- ESTADOS ---
-  const [userData, setUserData] = useState(null); // Guarda toda a payload do documento Firebase
-  const [nome, setNome] = useState(''); // Campo editável de nome
-  const [profileImage, setProfileImage] = useState(null); // URI local da imagem escolhida
-  const [loading, setLoading] = useState(true); // Loading inicial do ecrã
-  const [saving, setSaving] = useState(false); // Loading de gravação (feedback para o botão de save)
+  const [userData, setUserData] = useState(null);
+  const [nome, setNome] = useState('');
+  const [profileImage, setProfileImage] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  // --- EFEITO: Buscar Perfil da Firestore ---
   useEffect(() => {
+    let isMounted = true;
+
     const fetchProfile = async () => {
       try {
         if (auth.currentUser) {
-          // Busca os dados diretamente associados ao UID que fez login
           const docRef = doc(db, 'users', auth.currentUser.uid);
           const docSnap = await getDoc(docRef);
-          
-          if (docSnap.exists()) {
+
+          if (docSnap.exists() && isMounted) {
             const data = docSnap.data();
             setUserData(data);
             setNome(data.nome || '');
-            setProfileImage(data.profileImage || null); 
+            if (data.profileImage) {
+              setProfileImage(data.profileImage);
+            }
           }
         }
       } catch (error) {
-        Alert.alert("Erro", "Não foi possível carregar o perfil.");
+        console.warn('[ProfileScreen] Erro ao carregar perfil:', error);
       } finally {
-        setLoading(false); // Ecrã pronto para renderizar
+        if (isMounted) setLoading(false);
       }
     };
+
     fetchProfile();
-  }, []);
 
-  // --- FUNÇÃO: Interagir com a Galeria (Expo Image Picker) ---
+    const onBackPress = () => {
+      navigation.goBack();
+      return true;
+    };
+
+    const backHandlerSubscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+    return () => {
+      isMounted = false;
+      backHandlerSubscription.remove();
+    };
+  }, [navigation]);
+
+  // Seleção de fotografia de perfil com verificação de permissões no Android
   const handlePickImage = async () => {
-    // Abre a biblioteca nativa do telemóvel para escolher fotos
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, // Filtra apenas imagens (sem vídeo)
-      allowsEditing: true, // Permite ao utilizador cortar a foto
-      aspect: [1, 1], // Força um rácio quadrado (ideal para avatares redondos)
-      quality: 0.5, // Comprime a imagem para poupar dados/storage
-    });
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permissão Necessária',
+          'Conceda acesso à galeria para alterar a sua fotografia de perfil.'
+        );
+        return;
+      }
 
-    if (!result.canceled) {
-      // Se não cancelou a seleção, guardamos a URI temporária gerada pelo dispositivo
-      setProfileImage(result.assets[0].uri); 
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.6,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setProfileImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.warn('[ProfileScreen] Erro ao escolher imagem:', error);
+      Alert.alert('Erro', 'Não foi possível selecionar a imagem pretendida.');
     }
   };
 
-  // --- FUNÇÃO: Guardar Alterações na Firebase ---
   const handleUpdateProfile = async () => {
+    const cleanNome = nome.trim();
+    if (!cleanNome) {
+      Alert.alert('Atenção', 'O nome completo não pode estar em branco.');
+      return;
+    }
+
+    if (!auth.currentUser) {
+      Alert.alert('Erro', 'Sessão expirada. Volte a iniciar sessão.');
+      return;
+    }
+
     setSaving(true);
     try {
       const docRef = doc(db, 'users', auth.currentUser.uid);
-      // updateDoc só altera os campos que passamos, não apaga o resto do documento (ex: NIF, role, etc)
-      await updateDoc(docRef, { 
-        nome: nome,
-        profileImage: profileImage 
-        // Nota Arquitetural: Aqui a profileImage só grava a string da URI local. 
-        // No futuro, terás de fazer o upload deste ficheiro real para o Firebase Storage.
+      await updateDoc(docRef, {
+        nome: cleanNome,
+        profileImage: profileImage || null,
+        updatedAt: new Date().toISOString(),
       });
-      Alert.alert("Sucesso", "Perfil atualizado com sucesso!");
+      Alert.alert('Perfil Atualizado', 'As suas alterações foram guardadas com sucesso.');
     } catch (error) {
-      Alert.alert("Erro", "Falha ao atualizar o perfil.");
+      console.warn('[ProfileScreen] Erro ao atualizar perfil:', error);
+      Alert.alert('Erro', 'Ocorreu uma falha ao gravar as alterações.');
     } finally {
       setSaving(false);
     }
   };
 
-  // --- LOADING INICIAL ---
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -95,83 +131,125 @@ export default function ProfileScreen({ navigation }) {
     );
   }
 
-  // --- UI RENDER ---
+  const formatRole = (role) => {
+    switch (role) {
+      case 'vitima':
+        return 'Cidadão / Vítima';
+      case 'socorrista':
+        return 'Socorrista Operacional';
+      case 'operador':
+        return 'Operador de Central';
+      case 'organizacao':
+        return 'Administrador de Organização';
+      default:
+        return (role || 'Utilizador').toUpperCase();
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* KeyboardAvoidingView emula o comportamento do teclado empurrando a vista (padding) */}
-      <KeyboardAvoidingView 
-        style={{ flex: 1, width: '100%' }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <KeyboardAvoidingView
+        style={{ flex: 1, width: '100%' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView 
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center',  paddingBottom: 20 }} 
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingBottom: 30 }}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.card}>
-            <Text style={styles.title}>O Meu Perfil</Text>
+            <Text style={styles.title}>Perfil de Utilizador</Text>
 
-            {/* SECTOR DO AVATAR FOTOGRÁFICO */}
+            {/* Avatar do Utilizador */}
             <View style={styles.avatarContainer}>
-              <TouchableOpacity onPress={handlePickImage}>
-                {profileImage ? (
-                  // Se houver URI válida (da BD ou nova seleção), renderiza a foto
-                  <Image source={{ uri: profileImage }} style={styles.avatar} />
-                ) : (
-                  // Fallback: Ícone genérico se não tiver foto de perfil
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={{ fontSize: 50 }}>👤</Text>
-                  </View>
-                )}
-                
-                {/* Ícone pequeno sobreposto a indicar edição */}
-                <View style={styles.editAvatarButton}>
-                  <Text style={{ fontSize: 16, color: '#FFF' }}>📷</Text>
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={{ fontSize: 44 }}>👤</Text>
                 </View>
+              )}
+
+              <TouchableOpacity
+                style={styles.editAvatarButton}
+                onPress={handlePickImage}
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: '#FFF', fontSize: 16 }}>📷</Text>
               </TouchableOpacity>
             </View>
 
-            {/* RENDERIZAÇÃO CONDICIONAL: Crachá Organizacional */}
-            {/* Só é visível se for um Socorrista/Operador vinculado a uma organização (ex: Bombeiros) */}
+            {/* Indicador de Organização */}
             {userData?.organizacao && (
               <View style={styles.orgBadge}>
-                <Text style={styles.orgBadgeTitle}>Vínculo Profissional:</Text>
+                <Text style={styles.orgBadgeTitle}>ORGANIZAÇÃO AFETA</Text>
                 <Text style={styles.orgBadgeName}>{userData.organizacao}</Text>
               </View>
             )}
 
-            {/* SECÇÃO DE DADOS APENAS DE LEITURA (Não Editáveis por Segurança) */}
+            {/* Informação Não-Editável */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Cargo / Tipo de Conta</Text>
-              <TextInput style={styles.disabledInput} value={userData?.role.toUpperCase()} editable={false} />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email Associado</Text>
-              <TextInput style={styles.disabledInput} value={userData?.email} editable={false} />
-            </View>
-
-            {/* DADOS EDITÁVEIS */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nome Completo</Text>
-              <TextInput 
-                style={styles.input} 
-                value={nome} 
-                onChangeText={setNome} 
-                placeholder="O seu nome..."
+              <Text style={styles.label}>Tipo de Perfil</Text>
+              <TextInput
+                style={styles.disabledInput}
+                value={formatRole(userData?.role)}
+                editable={false}
               />
             </View>
 
-            {/* Botão de Guardar Alterações com feedback dinâmico */}
-            <TouchableOpacity style={styles.saveButton} onPress={handleUpdateProfile} disabled={saving}>
-              {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveButtonText}>Guardar Alterações</Text>}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Endereço de Email</Text>
+              <TextInput
+                style={styles.disabledInput}
+                value={userData?.email || ''}
+                editable={false}
+              />
+            </View>
+
+            {userData?.nif && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>NIF Registado</Text>
+                <TextInput
+                  style={styles.disabledInput}
+                  value={userData.nif}
+                  editable={false}
+                />
+              </View>
+            )}
+
+            {/* Nome Editável */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Nome Completo</Text>
+              <TextInput
+                style={styles.input}
+                value={nome}
+                onChangeText={setNome}
+                placeholder="Insira o seu nome..."
+                placeholderTextColor="#95A5A6"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleUpdateProfile}
+              disabled={saving}
+              activeOpacity={0.8}
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.saveButtonText}>Guardar Alterações</Text>
+              )}
             </TouchableOpacity>
           </View>
 
-          {/* Botão de Regresso */}
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}> Voltar ao Dashboard</Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.backButtonText}>← Voltar ao Dashboard</Text>
           </TouchableOpacity>
-          
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

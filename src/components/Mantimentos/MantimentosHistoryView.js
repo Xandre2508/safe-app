@@ -1,53 +1,73 @@
-import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '../../firebaseConfig'; // Verifica se este caminho está correto para o teu projeto
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
-// 🔄 ALTERADO: Nome do componente
+import { auth, db } from '../../firebaseConfig';
+
 export default function MantimentosHistoryView() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Estado para controlar qual o filtro selecionado
   const [activeFilter, setActiveFilter] = useState('todos');
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchHistory = async () => {
-      if (!auth.currentUser) return;
+      if (!auth.currentUser) {
+        if (isMounted) setLoading(false);
+        return;
+      }
 
       try {
-        // 🔄 ALTERADO: Buscar os dados à coleção correta
         const q = query(
           collection(db, 'pedidos_mantimentos'),
-          where('userId', '==', auth.currentUser.uid),
-          orderBy('timestamp', 'desc')
+          where('userId', '==', auth.currentUser.uid)
         );
 
         const querySnapshot = await getDocs(q);
-        const fetchedHistory = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+        const fetchedHistory = querySnapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
         }));
 
-        setHistory(fetchedHistory);
+        fetchedHistory.sort((a, b) => {
+          const timeA = a.timestamp?.seconds || 0;
+          const timeB = b.timestamp?.seconds || 0;
+          return timeB - timeA;
+        });
+
+        if (isMounted) setHistory(fetchedHistory);
       } catch (error) {
-        console.error("Erro ao carregar histórico:", error);
+        console.warn('[MantimentosHistoryView] Erro ao carregar histórico:', error);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     fetchHistory();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const formatDate = (timestamp) => {
-    if (!timestamp) return 'Data desconhecida';
-    const date = timestamp.toDate();
-    return date.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    if (!timestamp) return 'Recente';
+    try {
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      return date.toLocaleDateString('pt-PT', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return 'Data não disponível';
+    }
   };
 
-  // Lógica que filtra a lista original baseada no botão selecionado
-  const filteredHistory = history.filter(item => {
+  const filteredHistory = history.filter((item) => {
     if (activeFilter === 'todos') return true;
     return item.status === activeFilter;
   });
@@ -55,76 +75,65 @@ export default function MantimentosHistoryView() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#3B82F6" /> {/* Cor azul em vez de vermelho */}
-        <Text style={styles.loadingText}>A carregar histórico...</Text>
+        <ActivityIndicator size="small" color="#3B82F6" />
+        <Text style={styles.loadingText}>A carregar histórico de mantimentos...</Text>
       </View>
     );
   }
 
-  // Define as cores consoante o estado do pedido
   const getStatusStyle = (status) => {
-    switch(status) {
-      case 'pendente': return styles.statusPendente;
-      case 'concluido': return styles.statusConcluido;
-      case 'cancelado': return styles.statusCancelado;
-      default: return styles.statusPendente;
+    switch (status) {
+      case 'pendente':
+        return styles.statusPendente;
+      case 'concluido':
+        return styles.statusConcluido;
+      case 'cancelado':
+        return styles.statusCancelado;
+      default:
+        return styles.statusPendente;
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* 🔄 ALTERADO: Título atualizado */}
-      <Text style={styles.title}>Histórico de Pedidos</Text>
-      
-      {/* Barra de Filtros Horizontal */}
-      <View style={{ marginBottom: 15 }}>
+      <Text style={styles.title}>Histórico de Mantimentos</Text>
+
+      <View style={{ marginBottom: 12 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContainer}>
-          {['todos', 'pendente', 'concluido', 'cancelado'].map((filterType) => (
+          {[
+            { key: 'todos', label: 'Todos' },
+            { key: 'pendente', label: 'Pendentes' },
+            { key: 'concluido', label: 'Concluídos' },
+            { key: 'cancelado', label: 'Cancelados' },
+          ].map((filter) => (
             <TouchableOpacity
-              key={filterType}
-              style={[
-                styles.filterChip,
-                activeFilter === filterType && styles.filterChipActive
-              ]}
-              onPress={() => setActiveFilter(filterType)}
+              key={filter.key}
+              style={[styles.filterChip, activeFilter === filter.key && styles.filterChipActive]}
+              onPress={() => setActiveFilter(filter.key)}
+              activeOpacity={0.7}
             >
-              <Text style={[
-                styles.filterText,
-                activeFilter === filterType && styles.filterTextActive
-              ]}>
-                {filterType.charAt(0).toUpperCase() + filterType.slice(1)}
+              <Text style={[styles.filterText, activeFilter === filter.key && styles.filterTextActive]}>
+                {filter.label}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
-      
-      {/* Renderizar a lista 'filteredHistory' */}
+
       {filteredHistory.length === 0 ? (
-        // 🔄 ALTERADO: Texto para quando não há histórico
-        <Text style={styles.emptyText}>Não tem pedidos de mantimentos neste estado.</Text>
+        <Text style={styles.emptyText}>Não foram encontrados pedidos de mantimentos para este filtro.</Text>
       ) : (
         filteredHistory.map((item) => (
           <View key={item.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.date}>{formatDate(item.timestamp)}</Text>
               <Text style={[styles.status, getStatusStyle(item.status)]}>
-                {item.status.toUpperCase()}
+                {item.status ? item.status.toUpperCase() : 'PENDENTE'}
               </Text>
             </View>
-            
-            {/* 🔄 ALTERADO: Detalhes do pedido de mantimentos */}
-            <Text style={styles.details}>
-              Pedido: {item.detalhes?.descricao || 'N/A'}
-            </Text>
-            <Text style={styles.details}>
-              Quantidade: {item.detalhes?.quantidade || 'N/A'}
-            </Text>
-            
-            {/* Aviso visual caso o pedido seja urgente */}
-            {item.detalhes?.urgente && (
-              <Text style={styles.urgentText}>⚠️ Pedido Urgente</Text>
-            )}
+
+            <Text style={styles.details}>📦 Pedido: {item.detalhes?.descricao || 'Mantimentos Gerais'}</Text>
+            <Text style={styles.details}>🔢 Quantidade: {item.detalhes?.quantidade || '1'}</Text>
           </View>
         ))
       )}
@@ -132,57 +141,56 @@ export default function MantimentosHistoryView() {
   );
 }
 
-// Estilos locais
 const styles = StyleSheet.create({
   container: {
-    padding: 15,
-    backgroundColor: '#fff',
-    borderRadius: 15,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     marginVertical: 10,
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
-    elevation: 3,
   },
   title: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#333',
+    marginBottom: 12,
+    color: '#1E293B',
   },
   filterContainer: {
     flexDirection: 'row',
-    paddingVertical: 5,
+    paddingVertical: 4,
   },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: '#F1F5F9',
     borderRadius: 20,
-    marginRight: 10,
+    marginRight: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
   },
   filterChipActive: {
-    backgroundColor: '#3B82F6', // Azul
-    borderColor: '#3B82F6',
+    backgroundColor: '#3B82F6',
+    borderColor: '#2563EB',
   },
   filterText: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: 13,
+    color: '#64748B',
     fontWeight: '600',
   },
   filterTextActive: {
     color: '#FFFFFF',
   },
   card: {
-    padding: 15,
-    backgroundColor: '#F9FAFB',
+    padding: 14,
+    backgroundColor: '#F8FAFC',
     borderRadius: 10,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: '#E2E8F0',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -191,51 +199,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   date: {
-    fontSize: 14,
-    color: '#4B5563',
+    fontSize: 13,
+    color: '#64748B',
     fontWeight: '600',
   },
   status: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 6,
     overflow: 'hidden',
   },
   statusPendente: {
-    backgroundColor: '#FEF3C7', 
-    color: '#92400E', 
+    backgroundColor: '#FEF3C7',
+    color: '#92400E',
   },
   statusConcluido: {
-    backgroundColor: '#D1FAE5', 
-    color: '#065F46', 
+    backgroundColor: '#D1FAE5',
+    color: '#065F46',
   },
   statusCancelado: {
-    backgroundColor: '#FEE2E2', 
-    color: '#991B1B', 
+    backgroundColor: '#FEE2E2',
+    color: '#991B1B',
   },
   details: {
     fontSize: 14,
-    color: '#4B5563',
+    color: '#334155',
     marginTop: 2,
-  },
-  // 🔄 NOVO ESTILO: Para destacar os pedidos urgentes
-  urgentText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#EF4444', // Vermelho
-    marginTop: 8,
   },
   emptyText: {
     textAlign: 'center',
-    color: '#9CA3AF',
+    color: '#94A3B8',
     fontStyle: 'italic',
     paddingVertical: 20,
   },
   loadingText: {
     textAlign: 'center',
     marginTop: 10,
-    color: '#6B7280',
-  }
+    color: '#64748B',
+    fontSize: 13,
+  },
 });

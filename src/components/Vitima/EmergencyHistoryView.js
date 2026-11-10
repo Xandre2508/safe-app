@@ -1,7 +1,8 @@
-import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '../../firebaseConfig'; // Ajusta o caminho se necessário
+import { collection, getDocs, query, where } from 'firebase/firestore';
+
+import { auth, db } from '../../firebaseConfig';
 
 export default function EmergencyHistoryView() {
   const [history, setHistory] = useState([]);
@@ -9,92 +10,135 @@ export default function EmergencyHistoryView() {
   const [activeFilter, setActiveFilter] = useState('todos');
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchHistory = async () => {
-      if (!auth.currentUser) return;
+      if (!auth.currentUser) {
+        if (isMounted) setLoading(false);
+        return;
+      }
 
       try {
-        // 1. Criar as queries para ambas as coleções
         const qSOS = query(collection(db, 'sos_requests'), where('userId', '==', auth.currentUser.uid));
         const qMant = query(collection(db, 'pedidos_mantimentos'), where('userId', '==', auth.currentUser.uid));
 
-        // 2. Buscar dados em paralelo
         const [sosSnapshot, mantSnapshot] = await Promise.all([getDocs(qSOS), getDocs(qMant)]);
 
-        // 3. Mapear e adicionar um campo 'tipo' para distinguir
-        const sosData = sosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), tipo: 'sos' }));
-        const mantData = mantSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), tipo: 'mantimento' }));
+        const sosData = sosSnapshot.docs.map((d) => ({ id: d.id, ...d.data(), tipo: 'sos' }));
+        const mantData = mantSnapshot.docs.map((d) => ({ id: d.id, ...d.data(), tipo: 'mantimento' }));
 
-        // 4. Juntar e ordenar por data
-        const combined = [...sosData, ...mantData].sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
+        const combined = [...sosData, ...mantData].sort((a, b) => {
+          const timeA = a.timestamp?.seconds || 0;
+          const timeB = b.timestamp?.seconds || 0;
+          return timeB - timeA;
+        });
 
-        setHistory(combined);
+        if (isMounted) setHistory(combined);
       } catch (error) {
-        console.error("Erro ao carregar histórico:", error);
+        console.warn('[EmergencyHistoryView] Erro ao carregar histórico:', error);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     fetchHistory();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const formatDate = (timestamp) => {
-    if (!timestamp) return 'Data desconhecida';
-    return timestamp.toDate().toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    if (!timestamp) return 'Recente';
+    try {
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      return date.toLocaleDateString('pt-PT', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return 'Data não disponível';
+    }
   };
 
-  const filteredHistory = history.filter(item => {
+  const filteredHistory = history.filter((item) => {
     if (activeFilter === 'todos') return true;
     if (activeFilter === 'mantimento') return item.tipo === 'mantimento';
     return item.status === activeFilter;
   });
 
   const getStatusStyle = (status) => {
-    switch(status) {
-      case 'pendente': return styles.statusPendente;
-      case 'concluido': return styles.statusConcluido;
-      case 'cancelado': return styles.statusCancelado;
-      default: return styles.statusPendente;
+    switch (status) {
+      case 'pendente':
+        return styles.statusPendente;
+      case 'concluido':
+        return styles.statusConcluido;
+      case 'cancelado':
+        return styles.statusCancelado;
+      default:
+        return styles.statusPendente;
     }
   };
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="small" color="#3B82F6" />
+        <Text style={styles.loadingText}>A carregar o seu histórico...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Histórico de Alertas</Text>
-      
-      <View style={{ marginBottom: 15 }}>
+      <Text style={styles.title}>Histórico de Alertas e Pedidos</Text>
+
+      <View style={{ marginBottom: 12 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContainer}>
-          {['todos', 'mantimento', 'pendente', 'concluido', 'cancelado'].map((filterType) => (
+          {[
+            { key: 'todos', label: 'Todos' },
+            { key: 'mantimento', label: 'Mantimentos' },
+            { key: 'pendente', label: 'Pendentes' },
+            { key: 'concluido', label: 'Concluídos' },
+            { key: 'cancelado', label: 'Cancelados' },
+          ].map((filter) => (
             <TouchableOpacity
-              key={filterType}
-              style={[styles.filterChip, activeFilter === filterType && styles.filterChipActive]}
-              onPress={() => setActiveFilter(filterType)}
+              key={filter.key}
+              style={[styles.filterChip, activeFilter === filter.key && styles.filterChipActive]}
+              onPress={() => setActiveFilter(filter.key)}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.filterText, activeFilter === filterType && styles.filterTextActive]}>
-                {filterType.charAt(0).toUpperCase() + filterType.slice(1)}
+              <Text style={[styles.filterText, activeFilter === filter.key && styles.filterTextActive]}>
+                {filter.label}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
-      
+
       {filteredHistory.length === 0 ? (
-        <Text style={styles.emptyText}>Não tem pedidos neste estado.</Text>
+        <Text style={styles.emptyText}>Não foram encontrados registos para este filtro.</Text>
       ) : (
         filteredHistory.map((item) => (
           <View key={item.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.date}>{formatDate(item.timestamp)}</Text>
               <Text style={[styles.status, getStatusStyle(item.status)]}>
-                {item.status.toUpperCase()}
+                {item.status ? item.status.toUpperCase() : 'PENDENTE'}
               </Text>
             </View>
-            
-            {/* Renderização condicional dos detalhes */}
+
             {item.tipo === 'mantimento' ? (
-              <Text style={styles.details}>📦 Pedido: {item.detalhes?.descricao} | Qtd: {item.detalhes?.quantidade}</Text>
+              <Text style={styles.details}>
+                📦 Pedido: {item.detalhes?.descricao || 'Mantimentos'} | Qtd: {item.detalhes?.quantidade || '1'}
+              </Text>
             ) : (
-              <Text style={styles.details}>🎂 Idade: {item.detalhes?.idade || 'N/A'} | Crianças: {item.detalhes?.criancas ? 'Sim' : 'Não'}</Text>
+              <Text style={styles.details}>
+                🚨 SOS | Idade: {item.detalhes?.idade || 'N/A'} | Crianças: {item.detalhes?.criancas ? 'Sim' : 'Não'}
+              </Text>
             )}
           </View>
         ))
@@ -103,59 +147,56 @@ export default function EmergencyHistoryView() {
   );
 }
 
-// Estilos locais atualizados com os filtros e novas cores
 const styles = StyleSheet.create({
   container: {
-    padding: 15,
-    backgroundColor: '#fff',
-    borderRadius: 15,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     marginVertical: 10,
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
-    elevation: 3,
   },
   title: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#333',
+    marginBottom: 12,
+    color: '#1E293B',
   },
-  // --- Estilos dos Filtros ---
   filterContainer: {
     flexDirection: 'row',
-    paddingVertical: 5,
+    paddingVertical: 4,
   },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: '#F1F5F9',
     borderRadius: 20,
-    marginRight: 10,
+    marginRight: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
   },
   filterChipActive: {
-    backgroundColor: '#3B82F6', 
-    borderColor: '#3B82F6',
+    backgroundColor: '#3B82F6',
+    borderColor: '#2563EB',
   },
   filterText: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: 13,
+    color: '#64748B',
     fontWeight: '600',
   },
   filterTextActive: {
     color: '#FFFFFF',
   },
-  // --- Estilos dos Cartões ---
   card: {
-    padding: 15,
-    backgroundColor: '#F9FAFB',
+    padding: 14,
+    backgroundColor: '#F8FAFC',
     borderRadius: 10,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: '#E2E8F0',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -164,43 +205,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   date: {
-    fontSize: 14,
-    color: '#4B5563',
+    fontSize: 13,
+    color: '#64748B',
     fontWeight: '600',
   },
   status: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 6,
     overflow: 'hidden',
   },
   statusPendente: {
-    backgroundColor: '#FEF3C7', 
-    color: '#92400E', 
+    backgroundColor: '#FEF3C7',
+    color: '#92400E',
   },
   statusConcluido: {
-    backgroundColor: '#D1FAE5', 
-    color: '#065F46', 
+    backgroundColor: '#D1FAE5',
+    color: '#065F46',
   },
   statusCancelado: {
-    backgroundColor: '#FEE2E2', 
-    color: '#991B1B', 
+    backgroundColor: '#FEE2E2',
+    color: '#991B1B',
   },
   details: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#334155',
   },
   emptyText: {
     textAlign: 'center',
-    color: '#9CA3AF',
+    color: '#94A3B8',
     fontStyle: 'italic',
     paddingVertical: 20,
   },
   loadingText: {
     textAlign: 'center',
     marginTop: 10,
-    color: '#6B7280',
-  }
+    color: '#64748B',
+    fontSize: 13,
+  },
 });

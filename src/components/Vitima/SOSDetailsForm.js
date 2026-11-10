@@ -1,82 +1,91 @@
-// src/components/SOSDetailsForm.js
-// Formulário para apanhar detalhes adicionais do usuário durante o processo de SOS
-// ESTA MERDA É USADA NO VICTIM DASHBOARD OBG
-
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-export default function SOSDetailsForm({ 
-  idade, setIdade, 
-  estaGravida, setEstaGravida, 
-  temCriancas, setTemCriancas, 
-  setShowDetailsForm, handleConfirmSOS, isSending 
+export default function SOSDetailsForm({
+  idade,
+  setIdade,
+  estaGravida,
+  setEstaGravida,
+  temCriancas,
+  setTemCriancas,
+  setShowDetailsForm,
+  handleConfirmSOS,
+  isSending,
 }) {
   return (
     <View style={localStyles.container}>
       <View style={localStyles.headerContainer}>
         <Ionicons name="shield-alert-outline" size={24} color="#EF4444" />
-        <Text style={localStyles.title}>Detalhes para o Resgate:</Text>
+        <Text style={localStyles.title}>Detalhes da Emergência</Text>
       </View>
-      
-      {/* Campo para a Idade */}
+
+      {/* Idade Declarada */}
       <View style={localStyles.inputWrapper}>
         <Ionicons name="person-outline" size={20} color="#9CA3AF" style={localStyles.inputIcon} />
         <TextInput
           style={localStyles.inputArea}
-          placeholder="A sua Idade (ex: 35)"
+          placeholder="Idade (ex: 34)"
           placeholderTextColor="#9CA3AF"
           keyboardType="numeric"
+          maxLength={3}
           value={idade}
           onChangeText={setIdade}
         />
       </View>
 
-      {/* Switch para grávida */}
+      {/* Condição de Grávida */}
       <View style={localStyles.switchRow}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <MaterialCommunityIcons name="baby-carriage" size={20} color={estaGravida ? "#EF4444" : "#6B7280"} />
+          <MaterialCommunityIcons name="baby-carriage" size={20} color={estaGravida ? '#EF4444' : '#6B7280'} />
           <Text style={[localStyles.switchLabel, estaGravida && { color: '#EF4444', fontWeight: 'bold' }]}>
-            Está grávida?
+            Encontra-se grávida?
           </Text>
         </View>
-        <Switch 
-          value={estaGravida} 
-          onValueChange={setEstaGravida} 
-          trackColor={{ false: "#D1D5DB", true: "#FCA5A5" }}
-          thumbColor={estaGravida ? "#EF4444" : "#f4f3f4"}
+        <Switch
+          value={estaGravida}
+          onValueChange={setEstaGravida}
+          trackColor={{ false: '#D1D5DB', true: '#FCA5A5' }}
+          thumbColor={estaGravida ? '#EF4444' : '#F4F3F4'}
         />
       </View>
 
-      {/* Switch para crianças */}
+      {/* Crianças Presentes */}
       <View style={localStyles.switchRow}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <MaterialCommunityIcons name="human-child" size={20} color={temCriancas ? "#EF4444" : "#6B7280"} />
+          <MaterialCommunityIcons name="human-child" size={20} color={temCriancas ? '#EF4444' : '#6B7280'} />
           <Text style={[localStyles.switchLabel, temCriancas && { color: '#EF4444', fontWeight: 'bold' }]}>
-            Tem crianças consigo?
+            Existem crianças no local?
           </Text>
         </View>
-        <Switch 
-          value={temCriancas} 
-          onValueChange={setTemCriancas} 
-          trackColor={{ false: "#D1D5DB", true: "#FCA5A5" }}
-          thumbColor={temCriancas ? "#EF4444" : "#f4f3f4"}
+        <Switch
+          value={temCriancas}
+          onValueChange={setTemCriancas}
+          trackColor={{ false: '#D1D5DB', true: '#FCA5A5' }}
+          thumbColor={temCriancas ? '#EF4444' : '#F4F3F4'}
         />
       </View>
 
       <View style={localStyles.buttonRow}>
-        {/* Botão de Cancelar */}
-        <TouchableOpacity style={localStyles.btnCancel} onPress={() => setShowDetailsForm(false)}>
+        <TouchableOpacity
+          style={localStyles.btnCancel}
+          onPress={() => setShowDetailsForm(false)}
+          activeOpacity={0.7}
+        >
           <Text style={localStyles.btnCancelText}>Cancelar</Text>
         </TouchableOpacity>
 
-        {/* Botão de Confirmar */}
-        <TouchableOpacity style={[localStyles.btnConfirm, isSending && { opacity: 0.7 }]} onPress={handleConfirmSOS} disabled={isSending}>
+        <TouchableOpacity
+          style={[localStyles.btnConfirm, isSending && { opacity: 0.7 }]}
+          onPress={handleConfirmSOS}
+          disabled={isSending}
+          activeOpacity={0.8}
+        >
           {isSending ? (
             <ActivityIndicator color="#FFF" />
           ) : (
             <>
               <Ionicons name="warning-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
-              <Text style={localStyles.btnConfirmText}>CONFIRMAR SOS</Text>
+              <Text style={localStyles.btnConfirmText}>EMITIR SOS</Text>
             </>
           )}
         </TouchableOpacity>
@@ -85,25 +94,24 @@ export default function SOSDetailsForm({
   );
 }
 
-// Estilos locais para unificar o design com o formulário de mantimentos
 const localStyles = StyleSheet.create({
   container: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 20,
+    padding: 18,
     marginVertical: 10,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowRadius: 6,
     borderWidth: 1,
     borderColor: '#F3F4F6',
   },
   headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   title: {
     fontSize: 18,
@@ -118,9 +126,9 @@ const localStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: 12,
-    marginBottom: 15,
+    marginBottom: 12,
     paddingHorizontal: 12,
-    minHeight: 50,
+    minHeight: 48,
   },
   inputIcon: {
     marginRight: 10,
@@ -129,7 +137,7 @@ const localStyles = StyleSheet.create({
     flex: 1,
     color: '#1F2937',
     fontSize: 15,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   switchRow: {
     flexDirection: 'row',
@@ -140,18 +148,18 @@ const localStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    marginBottom: 15,
+    marginBottom: 12,
   },
   switchLabel: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#4B5563',
     marginLeft: 8,
   },
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12, 
-    marginTop: 5,
+    gap: 10,
+    marginTop: 6,
   },
   btnCancel: {
     flex: 1,
@@ -167,23 +175,19 @@ const localStyles = StyleSheet.create({
     fontWeight: '600',
   },
   btnConfirm: {
-    flex: 1.6, 
-    backgroundColor: '#EF4444', // Vermelho forte para o SOS
+    flex: 1.6,
+    backgroundColor: '#EF4444',
     paddingVertical: 14,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    elevation: 3,
   },
   btnConfirmText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: 0.5,
-  }
+  },
 });

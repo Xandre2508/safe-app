@@ -1,337 +1,428 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  BackHandler,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, TouchableOpacity as GorhomTouchableOpacity } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
-import * as Notifications from 'expo-notifications';
 import { collection, doc, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
+import { signOut } from 'firebase/auth';
 
-import { auth, db } from '../../src/firebaseConfig';
+import { auth, db } from '../firebaseConfig';
+import { sendLocalNotification } from '../services/notifications';
 import { styles } from '../styles/RescuerDashboardStyles';
-
-// Componente de chat Rádio
 import RescuerChatView from '../components/Socorrista/RescuerChatView';
 
-// Constante para a API Key do Google Maps (Necessária para desenhar as rotas no mapa)
-const GOOGLE_MAPS_APIKEY = 'COLA_AQUI_A_TUA_CHAVE_DE_API'; 
-
-// Configuração do comportamento global das notificações push recebidas em primeiro plano
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 /**
- * Função para calcular a distância em Quilómetros entre duas coordenadas GPS.
- * Utiliza a Fórmula de Haversine para ter em conta a curvatura da terra.
+ * Fórmula de Haversine para cálculo da distância geodésica em quilómetros.
  */
 const getDistanceKm = (lat1, lon1, lat2, lon2) => {
-  const R = 6371; // Raio médio da Terra em km
+  const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-/**
- * Define o peso da prioridade da ocorrência baseado nos detalhes fornecidos.
- * Quanto menor o número, maior a prioridade (1 = Prioridade Máxima).
- */
 const getPriorityWeight = (detalhes) => {
-  if (!detalhes) return 4; // Prioridade normal
-  if (detalhes.criancas) return 1; // Máxima prioridade: crianças envolvidas
-  if (detalhes.gravida) return 2; // Alta prioridade: grávidas
-  return parseInt(detalhes.idade) > 65 ? 3 : 4; // Prioridade média para idosos, normal para os restantes
+  if (!detalhes) return 4;
+  if (detalhes.criancas) return 1; // Prioridade máxima
+  if (detalhes.gravida) return 2;
+  return parseInt(detalhes.idade, 10) > 65 ? 3 : 4;
 };
 
 export default function RescuerDashboard({ navigation }) {
-  // Variáveis de Estado (State)
-  const [location, setLocation] = useState(null); // Localização atual do socorrista
-  const [activeRequests, setActiveRequests] = useState([]); // Lista de todas as ocorrências ativas perto
-  const [currentMission, setCurrentMission] = useState(null); // Missão atual (a mais prioritária/próxima)
-  const [showChat, setShowChat] = useState(false); // Alterna entre a vista do mapa/missão e a vista do chat
-  
-  // Referências (Refs) para manter valores sem causar re-renderizações na interface
-  const chatIsOpenRef = useRef(false); // Para saber se o chat está aberto (usado nas notificações)
-  const bottomSheetRef = useRef(null); // Controlo da janela deslizante inferior (Bottom Sheet)
-  
-  // Pontos de paragem da altura do Bottom Sheet (15%, 45% e 85% do ecrã)
-  const snapPoints = useMemo(() => ['15%', '45%', '85%'], []);
+  const [location, setLocation] = useState(null);
+  const [activeRequests, setActiveRequests] = useState([]);
+  const [currentMission, setCurrentMission] = useState(null);
+  const [showChat, setShowChat] = useState(false);
 
-  // 1. Hook para pedir permissões de Notificação quando a app inicia
+  const chatIsOpenRef = useRef(false);
+  const bottomSheetRef = useRef(null);
+  const snapPoints = useMemo(() => ['18%', '48%', '88%'], []);
+
+  // Botão de voltar físico no Android
   useEffect(() => {
-    const requestNotificationPermissions = async () => {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Aviso', 'Ativa as notificações para receberes alertas da Central.');
+    const onBackPress = () => {
+      if (showChat) {
+        toggleChat();
+        return true;
       }
+      handleLogout();
+      return true;
     };
-    requestNotificationPermissions();
-  }, []);
 
-  // 2. Hook para escutar novas mensagens de rádio no Firebase
+    const backHandlerSubscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandlerSubscription.remove();
+  }, [showChat]);
+
+  // Listener das transmissões rádio da Central
   useEffect(() => {
     if (!auth.currentUser) return;
-    
-    // Referência à coleção de mensagens do socorrista autenticado
-    const chatRef = collection(db, 'operator_rescuer_chats', auth.currentUser.uid, 'messages');
-    const qChat = query(chatRef, orderBy('timestamp', 'desc'), limit(1)); // Pega apenas na última mensagem
 
-    // Escuta alterações em tempo real
+    const chatRef = collection(db, 'operator_rescuer_chats', auth.currentUser.uid, 'messages');
+    const qChat = query(chatRef, orderBy('timestamp', 'desc'), limit(1));
+
     const unsubscribeChat = onSnapshot(qChat, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
-        // Se a mensagem foi adicionada, foi enviada pelo operador, e o chat ESTÁ FECHADO, emite notificação local
         if (change.type === 'added') {
           const messageData = change.doc.data();
           if (messageData.senderRole === 'operador' && !chatIsOpenRef.current) {
-            Notifications.scheduleNotificationAsync({
-              content: { title: 'Central de Operações', body: messageData.text, sound: true },
-              trigger: null, // trigger null faz a notificação disparar imediatamente
-            });
+            sendLocalNotification(
+              'Central de Operações',
+              messageData.text || 'Nova mensagem de rádio recebida.',
+              'radio_messages'
+            );
           }
         }
       });
-    });
-    
-    return () => unsubscribeChat(); // Limpa o listener quando o componente é desmontado
+    }, (err) => console.warn('[RescuerDashboard] Erro no rádio:', err));
+
+    return () => unsubscribeChat();
   }, []);
 
-  // 3. Hook para rastrear a localização do Socorrista em tempo real
+  // Monitorização de GPS com fallback no Android
   useEffect(() => {
     let locationSubscription;
+
     const startLocationTracking = async () => {
-      // Pede permissão para aceder ao GPS
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        // Inicia a monitorização constante da localização
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'GPS Necessário',
+            'O S.A.F.E. necessita da sua localização para mapear as rotas de socorro.'
+          );
+          // Coordenadas padrão seguras (Lisboa / Porto) caso sem GPS
+          setLocation({
+            latitude: 41.1579,
+            longitude: -8.6291,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
+          });
+          return;
+        }
+
+        // Tentar obter a última posição conhecida imediatamente para arrancar rápido
+        const lastKnown = await Location.getLastKnownPositionAsync({});
+        if (lastKnown) {
+          setLocation({
+            latitude: lastKnown.coords.latitude,
+            longitude: lastKnown.coords.longitude,
+            latitudeDelta: 0.04,
+            longitudeDelta: 0.04,
+          });
+        }
+
         locationSubscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 15 }, // Atualiza a cada 5s ou 15 metros
-          (loc) => setLocation({ 
-            latitude: loc.coords.latitude, 
-            longitude: loc.coords.longitude, 
-            latitudeDelta: 0.04, 
-            longitudeDelta: 0.04 
-          })
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 4000,
+            distanceInterval: 10,
+          },
+          (loc) => {
+            setLocation({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+              latitudeDelta: 0.04,
+              longitudeDelta: 0.04,
+            });
+          }
         );
+      } catch (error) {
+        console.warn('[RescuerDashboard] Falha ao iniciar GPS:', error);
       }
     };
+
     startLocationTracking();
-    
-    return () => { if (locationSubscription) locationSubscription.remove(); };
+
+    return () => {
+      if (locationSubscription) locationSubscription.remove();
+    };
   }, []);
 
-  // 4. Hook para buscar pedidos de SOS e Mantimentos na base de dados
-  // Só corre se a 'location' for conhecida, ou se a location for atualizada
+  // Monitorização em tempo real de missões de resgate pendentes
   useEffect(() => {
-    if (!location) return; // Aguarda a obtenção das coordenadas do socorrista
-    
-    // Queries para procurar apenas missões pendentes
+    if (!location) return;
+
     const qSOS = query(collection(db, 'sos_requests'), where('status', '==', 'pendente'));
     const qMantimentos = query(collection(db, 'pedidos_mantimentos'), where('status', '==', 'pendente'));
 
     let pendingSOS = [];
     let pendingMant = [];
 
-    // Função interna que junta, filtra e ordena os pedidos
     const processRequests = () => {
-      let combinedRequests = [];
+      let combined = [];
 
-      // Filtra pedidos de SOS a um raio de 50km
       pendingSOS.forEach((data) => {
-        const distance = getDistanceKm(location.latitude, location.longitude, data.latitude, data.longitude);
-        if (distance <= 50) combinedRequests.push({ ...data, distance, tipoAlerta: 'SOS' });
+        if (data.latitude && data.longitude) {
+          const distance = getDistanceKm(location.latitude, location.longitude, data.latitude, data.longitude);
+          if (distance <= 60) {
+            combined.push({ ...data, distance, tipoAlerta: 'SOS' });
+          }
+        }
       });
 
-      // Filtra pedidos de mantimentos a um raio de 50km
       pendingMant.forEach((data) => {
-        const distance = getDistanceKm(location.latitude, location.longitude, data.latitude, data.longitude);
-        if (distance <= 50) combinedRequests.push({ ...data, distance, tipoAlerta: 'MANTIMENTO' });
+        if (data.latitude && data.longitude) {
+          const distance = getDistanceKm(location.latitude, location.longitude, data.latitude, data.longitude);
+          if (distance <= 60) {
+            combined.push({ ...data, distance, tipoAlerta: 'MANTIMENTO' });
+          }
+        }
       });
 
-      // Lógica de Ordenação das missões
-      combinedRequests.sort((a, b) => {
-        // Calcula o peso de prioridade de ambas
-        let weightA = a.tipoAlerta === 'SOS' ? getPriorityWeight(a.detalhes) : (a.detalhes?.urgente ? 2 : 4);
-        let weightB = b.tipoAlerta === 'SOS' ? getPriorityWeight(b.detalhes) : (b.detalhes?.urgente ? 2 : 4);
-        
-        // Se as prioridades forem diferentes, ordena pela prioridade. Se forem iguais, ordena pela distância (mais próximo primeiro)
-        return weightA !== weightB ? weightA - weightB : a.distance - b.distance; 
+      combined.sort((a, b) => {
+        const weightA = a.tipoAlerta === 'SOS' ? getPriorityWeight(a.detalhes) : a.detalhes?.urgente ? 2 : 4;
+        const weightB = b.tipoAlerta === 'SOS' ? getPriorityWeight(b.detalhes) : b.detalhes?.urgente ? 2 : 4;
+        return weightA !== weightB ? weightA - weightB : a.distance - b.distance;
       });
 
-      // Atualiza os estados de interface
-      setActiveRequests(combinedRequests);
-      setCurrentMission(combinedRequests.length > 0 ? combinedRequests[0] : null); // Define o index 0 como missão atual
+      setActiveRequests(combined);
+      setCurrentMission(combined.length > 0 ? combined[0] : null);
     };
 
-    // Listeners do Firebase para as duas coleções
     const unsubSOS = onSnapshot(qSOS, (snapshot) => {
-      pendingSOS = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      pendingSOS = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       processRequests();
     });
 
     const unsubMant = onSnapshot(qMantimentos, (snapshot) => {
-      pendingMant = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      pendingMant = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       processRequests();
     });
 
-    // Limpa os listeners ao desmontar ou se as coordenadas resetarem
-    return () => { unsubSOS(); unsubMant(); };
-  }, [location]); 
+    return () => {
+      unsubSOS();
+      unsubMant();
+    };
+  }, [location]);
 
-  // Função para abrir e fechar a janela do Chat
   const toggleChat = () => {
     const nextState = !showChat;
     setShowChat(nextState);
-    chatIsOpenRef.current = nextState; // Atualiza a Ref usada pelas notificações push
-    
-    // Anima o painel inferior dependendo se estamos a abrir o chat (85%) ou a ver o mapa (45%)
+    chatIsOpenRef.current = nextState;
+
     if (nextState) bottomSheetRef.current?.snapToIndex(2);
     else bottomSheetRef.current?.snapToIndex(1);
   };
 
-  // Função para dar a missão atual como concluída
   const handleCompleteMission = async () => {
     if (!currentMission) return;
-    
-    Alert.alert("Concluir Missão", "Confirmar que a missão está terminada?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Sim, Concluído", onPress: async () => {
+
+    Alert.alert('Concluir Ocorrência', 'Confirmar que a assistência foi prestada e a ocorrência está resolvida?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Confirmar Conclusão',
+        onPress: async () => {
           try {
-            // Verifica de qual coleção a missão veio e atualiza o campo "status"
             const colecao = currentMission.tipoAlerta === 'MANTIMENTO' ? 'pedidos_mantimentos' : 'sos_requests';
-            await updateDoc(doc(db, colecao, currentMission.id), { status: 'concluido' });
+            await updateDoc(doc(db, colecao, currentMission.id), {
+              status: 'concluido',
+              resolvedAt: new Date().toISOString(),
+              resolvedBy: auth.currentUser?.uid || 'socorrista',
+            });
+            Alert.alert('Sucesso', 'Ocorrência assinalada como resolvida.');
           } catch (error) {
-            Alert.alert("Erro", "Ocorreu um erro ao tentar concluir a missão.");
-            console.log(error);
+            console.warn('[RescuerDashboard] Erro ao concluir missão:', error);
+            Alert.alert('Erro', 'Não foi possível concluir a missão na base de dados.');
           }
-        }
-      }
+        },
+      },
     ]);
   };
 
-  // Lógica de saída de conta
   const handleLogout = () => {
-    Alert.alert("Terminar Sessão", "Tens a certeza que queres sair do sistema?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Sair", style: "destructive", onPress: () => navigation.navigate('Login') }
+    Alert.alert('Terminar Turno', 'Pretende encerrar a sua sessão operacional?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Sair',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut(auth);
+            navigation.replace('Login');
+          } catch (err) {
+            console.warn('[RescuerDashboard] Erro ao sair:', err);
+            navigation.replace('Login');
+          }
+        },
+      },
     ]);
   };
 
-  // ================= RENDERIZAÇÃO DA INTERFACE =================
   return (
     <View style={styles.container}>
-      
-      {/* Barra de Navegação no topo */}
-      <SafeAreaView style={styles.navBarContainer}>
+      {/* Barra de Navegação Superior */}
+      <SafeAreaView style={styles.navBarContainer} edges={['top', 'left', 'right']}>
         <View style={styles.navBar}>
-          <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('ProfileScreen')}>
+          <TouchableOpacity
+            style={styles.navButton}
+            onPress={() => navigation.navigate('ProfileScreen')}
+            activeOpacity={0.7}
+          >
             <Ionicons name="person-circle-outline" size={28} color="#4B5563" />
             <Text style={styles.navButtonText}>Perfil</Text>
           </TouchableOpacity>
 
-          {/* Botão central para alternar entre as visões Mapa / Rádio */}
-          <TouchableOpacity style={[styles.navChatButton, showChat && styles.navChatButtonActive]} onPress={toggleChat}>
+          <TouchableOpacity
+            style={[styles.navChatButton, showChat && styles.navChatButtonActive]}
+            onPress={toggleChat}
+            activeOpacity={0.8}
+          >
             <View style={styles.iconBadgeContainer}>
-              <Ionicons name="headset" size={24} color={showChat ? "#FFF" : "#3B82F6"} />
+              <Ionicons name="headset" size={24} color={showChat ? '#FFF' : '#3B82F6'} />
             </View>
             <Text style={[styles.navChatButtonText, showChat && { color: '#FFF' }]}>
-              {showChat ? "Ver Mapa" : "Central Rádio"}
+              {showChat ? 'Ver Mapa Tático' : 'Rádio Central'}
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.navButton} onPress={handleLogout}>
+          <TouchableOpacity style={styles.navButton} onPress={handleLogout} activeOpacity={0.7}>
             <Ionicons name="log-out-outline" size={28} color="#EF4444" />
             <Text style={[styles.navButtonText, { color: '#EF4444' }]}>Sair</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
 
-      {/* Renderização Condicional do Mapa (Mostra loading até obter GPS) */}
+      {/* Mapa Interativo */}
       {location ? (
-        <MapView style={StyleSheet.absoluteFillObject} showsUserLocation={true} showsMyLocationButton={false} region={location}>
-          {/* Se houver uma missão ativa, mostra o marcador e a rota calculada pelo Maps Directions */}
+        <MapView
+          style={StyleSheet.absoluteFillObject}
+          showsUserLocation
+          showsMyLocationButton={false}
+          region={location}
+        >
           {currentMission && (
             <>
-              <Marker coordinate={{ latitude: currentMission.latitude, longitude: currentMission.longitude }} pinColor="red" />
-              <MapViewDirections 
-                origin={location} 
-                destination={{ latitude: currentMission.latitude, longitude: currentMission.longitude }} 
-                apikey={GOOGLE_MAPS_APIKEY} 
-                strokeWidth={5} 
-                strokeColor="#3B82F6" 
+              <Marker
+                coordinate={{
+                  latitude: currentMission.latitude,
+                  longitude: currentMission.longitude,
+                }}
+                pinColor={currentMission.tipoAlerta === 'SOS' ? '#EF4444' : '#3B82F6'}
+                title={currentMission.tipoAlerta === 'SOS' ? '🚨 Vítima' : '📦 Entrega de Mantimentos'}
+                description={currentMission.userName || 'Pedido de Socorro'}
               />
+
+              {GOOGLE_MAPS_APIKEY ? (
+                <MapViewDirections
+                  origin={location}
+                  destination={{
+                    latitude: currentMission.latitude,
+                    longitude: currentMission.longitude,
+                  }}
+                  apikey={GOOGLE_MAPS_APIKEY}
+                  strokeWidth={5}
+                  strokeColor="#3B82F6"
+                  onError={(err) => console.warn('[RescuerDashboard] MapViewDirections falhou:', err)}
+                />
+              ) : (
+                /* Fallback sem necessidade de API Key: Traçado direto da rota */
+                <Polyline
+                  coordinates={[
+                    { latitude: location.latitude, longitude: location.longitude },
+                    { latitude: currentMission.latitude, longitude: currentMission.longitude },
+                  ]}
+                  strokeColor="#3B82F6"
+                  strokeWidth={4}
+                  lineDashPattern={[6, 4]}
+                />
+              )}
             </>
           )}
         </MapView>
       ) : (
-        <View style={styles.loadingMap}><Text>A calibrar GPS...</Text></View>
+        <View style={styles.loadingMap}>
+          <Text style={{ color: '#6B7280', fontSize: 16 }}>A obter sinal de GPS...</Text>
+        </View>
       )}
 
-      {/* Janela Deslizante Inferior (Bottom Sheet) */}
-      <BottomSheet 
-        ref={bottomSheetRef} 
-        index={1} // Inicia no tamanho intermédio (45%)
-        snapPoints={snapPoints} 
+      {/* Painel Inferior Deslizante (Bottom Sheet) */}
+      <BottomSheet
+        ref={bottomSheetRef}
+        index={1}
+        snapPoints={snapPoints}
         style={styles.bottomSheetShadow}
         keyboardBehavior="extend"
       >
-        {/* Renderiza Missões OU Chat, consoante o estado 'showChat' */}
         {!showChat ? (
-          <BottomSheetScrollView contentContainerStyle={styles.contentSection} keyboardShouldPersistTaps="handled">
-            
-            {/* Header de Ocorrências */}
+          <BottomSheetScrollView
+            contentContainerStyle={styles.contentSection}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.headerButtons}>
-              <View style={[styles.statusBadge, { backgroundColor: activeRequests.length > 0 ? '#EF4444' : '#10B981' }]}>
-                <Text style={styles.whiteIconText}>⚠️ Alerta de Ativos</Text>
-                <Text style={styles.countText}>{activeRequests.length} Ocorrências</Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: activeRequests.length > 0 ? '#EF4444' : '#10B981' },
+                ]}
+              >
+                <Text style={styles.whiteIconText}>🚨 Ocorrências no Raio de Ação</Text>
+                <Text style={styles.countText}>{activeRequests.length} Ativas</Text>
               </View>
             </View>
 
-            {/* Cartão de Detalhes da Missão Atual */}
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Missão Ativa {currentMission ? `(${currentMission.tipoAlerta})` : ''}:</Text>
-              
+              <Text style={styles.sectionTitle}>
+                Missão Prioritária {currentMission ? `(${currentMission.tipoAlerta})` : ''}:
+              </Text>
+
               {currentMission ? (
                 <>
-                  {/* Distância */}
-                  <Text style={styles.highlightDistance}>📍 {currentMission.distance.toFixed(1)} km</Text>
-                  
-                  {/* Informação do Utilizador em Perigo */}
-                  <Text style={styles.listItem}>👤 Nome: {currentMission.userName || "N/A"}</Text>
-                  
-                  {/* Caixa de Prioridade formatada */}
+                  <Text style={styles.highlightDistance}>
+                    📍 {currentMission.distance ? currentMission.distance.toFixed(1) : '0.0'} km de distância
+                  </Text>
+                  <Text style={styles.listItem}>👤 Cidadão: {currentMission.userName || 'Não identificado'}</Text>
+
                   {currentMission.detalhes && (
                     <View style={styles.priorityBox}>
                       <Text style={styles.priorityText}>
-                        🚨 PRIORIDADE: 
-                        {currentMission.tipoAlerta === 'SOS' 
-                          ? (currentMission.detalhes.criancas ? " CRIANÇAS PRESENTES" : 
-                             currentMission.detalhes.gravida ? " GRÁVIDA" : 
-                             parseInt(currentMission.detalhes.idade) > 65 ? " IDOSO" : " NORMAL")
-                          : (currentMission.detalhes.urgente ? " URGENTE" : " NORMAL")
-                        }
+                        STATUS DE TRIAGEM:{' '}
+                        {currentMission.tipoAlerta === 'SOS'
+                          ? currentMission.detalhes.criancas
+                            ? 'CRIANÇAS PRESENTES'
+                            : currentMission.detalhes.gravida
+                            ? 'GRÁVIDA'
+                            : parseInt(currentMission.detalhes.idade, 10) > 65
+                            ? 'IDOSO'
+                            : 'NORMAL'
+                          : currentMission.detalhes.urgente
+                          ? 'URGENTE'
+                          : 'NORMAL'}
                       </Text>
                     </View>
                   )}
 
-                  {/* Botão de Conclusão da Missão (Notar o GorhomTouchableOpacity para evitar conflitos no BottomSheet) */}
-                  <GorhomTouchableOpacity style={styles.completeButton} onPress={handleCompleteMission}>
+                  <GorhomTouchableOpacity
+                    style={styles.completeButton}
+                    onPress={handleCompleteMission}
+                    activeOpacity={0.8}
+                  >
                     <Ionicons name="checkmark-circle" size={20} color="#FFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.completeButtonText}>Marcar Concluído</Text>
+                    <Text style={styles.completeButtonText}>Assinalar Como Concluído</Text>
                   </GorhomTouchableOpacity>
                 </>
               ) : (
-                <Text style={styles.listItem}>Nenhuma ocorrência.</Text>
+                <Text style={styles.listItem}>Não existem ocorrências pendentes de momento.</Text>
               )}
             </View>
           </BottomSheetScrollView>
         ) : (
-          /* Visualização do Chat da Central */
           <View style={[styles.contentSection, { flex: 1, paddingBottom: 0 }]}>
             <View style={styles.chatHeader}>
               <GorhomTouchableOpacity onPress={toggleChat} style={styles.backButton}>
@@ -339,8 +430,7 @@ export default function RescuerDashboard({ navigation }) {
                 <Text style={styles.backButtonText}>Recolher Rádio</Text>
               </GorhomTouchableOpacity>
             </View>
-            
-            {/* Componente Modular do Chat */}
+
             <RescuerChatView currentUserId={auth.currentUser?.uid} />
           </View>
         )}

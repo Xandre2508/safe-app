@@ -1,30 +1,29 @@
+==============================================================
+S.A.F.E. - Estado de Implementação e Funcionalidades
+==============================================================
 
-Interface para um Operador 
+1. Interface Operador: CONCLUÍDO
+   - Painel com abas para Alertas de Ocorrências (SOS e Mantimentos) e Rádio Tático.
+   - Detalhes de triagem e histórico em tempo real.
+   - Resposta a pedidos de cancelamento de vítimas.
 
-Admin login
-admin@safe.pt
-adminadmin
+2. Acesso de Administrador:
+   - admin@safe.pt
+   - adminadmin (ou credenciais configuradas na organização)
 
+3. Registo e Autenticação: CONCLUÍDO
+   - Registo inicial criado por padrão como Vítima / Cidadão.
+   - Fluxo de recuperação de palavra-passe funcional.
+   - Roteamento dinâmico de acordo com a função do utilizador.
 
---------------------------------------------------------------
-registo - FEITO
-    Remover socorrista ou Vitima 
-    A conta ée craida automaticamente como vitima 
---------------------------------------------------------------
+4. Painel de Administração de Organização: CONCLUÍDO
+   - Criação de contas para Socorristas e Operadores associados à Organização.
+   - Preservação da sessão do Administrador durante a criação de funcionários.
 
+5. Perfil de Utilizador: CONCLUÍDO
+   - Suporte a foto de perfil via galeria fotográfica.
+   - Exibição de cargo e organização.
+   - Edição de nome próprio.
 
-Criar um painel de admin
-    -  Serve para criar acc para socorristas e Operadores
-    -  Ligados a uma ORG  
-    - Add o nome da Org ao perfil
-
-
---------------------------------------------------------------
-Fazer esqueceu a sua password - FEITO
---------------------------------------------------------------
-
-Adicionar perfil para vitima e socorrista 
-
-Trocar de Socorrista para Organizaçao no Registo
-
-ececece
+6. Otimizações para Dispositivos Android: CONCLUÍDO
+   - Permissões nativas, canais de notificações e BackHandler implementados.

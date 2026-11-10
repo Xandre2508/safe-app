@@ -30,8 +30,11 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (sensíveis)
+.env
 .env*.local
+.env.production
+.env.development
 
 # typescript
 *.tsbuildinfo
@@ -41,9 +44,3 @@ app-example
 # generated native folders
 /ios
 /android
-
-# firebase de dados config
-firebaseConfig.js
-
-#ApiKey para Noticias 
-.env

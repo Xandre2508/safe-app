@@ -1,20 +1,22 @@
-// src/components/EmergencyChat.js
-// Componente de chat para comunicação em tempo real entre vítima e operador durante um SOS
-// ESTA MERDA É USADA NO VICTIM DASHBOARD OBG
-
-import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
+
 import { db } from '../../firebaseConfig';
 
 export default function EmergencyChat({ sosId, currentUserRole, currentUserId }) {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
-  
-  // Ref para controlar o Scroll do chat automaticamente
-  const scrollViewRef = useRef();
+  const scrollViewRef = useRef(null);
 
-  // Listener para buscar as mensagens do SOS específico
   useEffect(() => {
     if (!sosId) return;
 
@@ -23,81 +25,84 @@ export default function EmergencyChat({ sosId, currentUserRole, currentUserId })
       orderBy('timestamp', 'asc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      // CORREÇÃO: { serverTimestamps: 'estimate' } força o Firebase a estimar 
-      // um tempo local para que a TUA mensagem apareça instantaneamente no teu ecrã!
-      const msgs = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data({ serverTimestamps: 'estimate' }) 
-      }));
-      setChatMessages(msgs);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const msgs = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data({ serverTimestamps: 'estimate' }),
+        }));
+        setChatMessages(msgs);
+      },
+      (error) => console.warn('[EmergencyChat] Erro no listener:', error)
+    );
 
     return () => unsubscribe();
   }, [sosId]);
 
-  // Função para enviar mensagem
   const handleSendMessage = async () => {
-    if (!chatInput.trim() || !sosId) return;
+    const textToSend = chatInput.trim();
+    if (!textToSend || !sosId) return;
 
-    const messageText = chatInput;
-    setChatInput(''); // Limpa o input imediatamente
+    setChatInput('');
 
     try {
       await addDoc(collection(db, 'sos_requests', sosId, 'messages'), {
-        senderId: currentUserId,
+        senderId: currentUserId || 'anonimo',
         senderRole: currentUserRole,
-        text: messageText,
-        timestamp: serverTimestamp()
+        text: textToSend,
+        timestamp: serverTimestamp(),
       });
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível enviar a mensagem.");
+      console.warn('[EmergencyChat] Erro ao enviar mensagem:', error);
+      Alert.alert('Erro', 'Não foi possível transmitir a mensagem.');
     }
   };
 
   return (
-    // CORREÇÃO: width: '100%' garante que os balões da direita não saem do ecrã
-    <View style={{ flex: 1, backgroundColor: '#FFF', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#E0E0E0', width: '100%' }}>
-      
-      {/* Cabeçalho do Chat para a Vítima */}
+    <View style={localStyles.container}>
       {currentUserRole === 'vitima' && (
-        <View style={{ borderBottomWidth: 1, borderBottomColor: '#EEEEEE', paddingBottom: 8, marginBottom: 10, width: '100%' }}>
-          <Text style={{ fontWeight: 'bold', color: '#E74C3C', fontSize: 16 }}>🚨 Chat de Emergência</Text>
-          <Text style={{ fontSize: 12, color: '#7F8C8D' }}>A sua localização está a ser partilhada.</Text>
+        <View style={localStyles.header}>
+          <Text style={localStyles.headerTitle}>🚨 Chat de Emergência Tático</Text>
+          <Text style={localStyles.headerSubtitle}>Canal direto de comunicação com o operador de serviço.</Text>
         </View>
       )}
 
-      {/* Histórico de Mensagens */}
-      <ScrollView 
+      <ScrollView
         ref={scrollViewRef}
-        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })} // CORREÇÃO: Auto-scroll para a base ao receber mensagens
-        style={{ flex: 1, marginBottom: 10, width: '100%' }} 
+        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+        style={localStyles.messagesArea}
         showsVerticalScrollIndicator={false}
       >
         {chatMessages.map((msg) => {
           const isMe = msg.senderRole === currentUserRole;
           const isSystem = msg.senderRole === 'sistema';
-          
+
           return (
-            <View 
-              key={msg.id} 
-              style={{
-                alignSelf: isSystem ? 'center' : (isMe ? 'flex-end' : 'flex-start'),
-                backgroundColor: isSystem ? '#FFF3CD' : (isMe ? (currentUserRole === 'operador' ? '#2980B9' : '#E74C3C') : '#EAECEE'),
-                padding: 10,
-                borderRadius: 12,
-                marginBottom: 8,
-                maxWidth: '85%',
-                borderWidth: isSystem ? 1 : 0,
-                borderColor: '#FFEEBA'
-              }}
+            <View
+              key={msg.id}
+              style={[
+                localStyles.bubble,
+                isSystem
+                  ? localStyles.systemBubble
+                  : isMe
+                  ? currentUserRole === 'operador'
+                    ? localStyles.operatorBubble
+                    : localStyles.myBubble
+                  : localStyles.otherBubble,
+              ]}
             >
               {!isSystem && currentUserRole === 'operador' && (
-                <Text style={{ fontSize: 10, fontWeight: 'bold', color: isMe ? '#D4E6F1' : '#7F8C8D', marginBottom: 2 }}>
-                  {isMe ? 'Eu (Operador)' : 'Vítima'}
+                <Text style={localStyles.senderLabel}>
+                  {isMe ? 'Eu (Operador)' : 'Vítima / Cidadão'}
                 </Text>
               )}
-              <Text style={{ color: isSystem ? '#856404' : (isMe ? '#FFF' : '#333'), fontSize: 14 }}>
+              <Text
+                style={[
+                  localStyles.messageText,
+                  isSystem ? localStyles.systemText : isMe ? localStyles.myText : localStyles.otherText,
+                ]}
+              >
                 {msg.text}
               </Text>
             </View>
@@ -105,22 +110,133 @@ export default function EmergencyChat({ sosId, currentUserRole, currentUserId })
         })}
       </ScrollView>
 
-      {/* Área de Input de Texto */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, borderTopWidth: 1, borderTopColor: '#EEEEEE', paddingTop: 10, width: '100%' }}>
+      <View style={localStyles.inputRow}>
         <TextInput
-          style={{ flex: 1, backgroundColor: '#F4F6F7', borderWidth: 1, borderColor: '#D5DBDB', borderRadius: 20, paddingHorizontal: 15, height: 40 }}
-          placeholder={currentUserRole === 'operador' ? "Instruções de segurança..." : "Escreva aqui..."}
+          style={localStyles.textInput}
+          placeholder={currentUserRole === 'operador' ? 'Instruções de segurança...' : 'Escreva a sua mensagem...'}
           placeholderTextColor="#95A5A6"
           value={chatInput}
           onChangeText={setChatInput}
         />
-        <TouchableOpacity 
-          style={{ marginLeft: 10, backgroundColor: currentUserRole === 'operador' ? '#2980B9' : '#E74C3C', borderRadius: 20, paddingHorizontal: 18, height: 40, justifyContent: 'center' }}
+        <TouchableOpacity
+          style={[
+            localStyles.sendButton,
+            { backgroundColor: currentUserRole === 'operador' ? '#1E3A8A' : '#E63946' },
+          ]}
           onPress={handleSendMessage}
+          activeOpacity={0.8}
         >
-          <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Enviar</Text>
+          <Text style={localStyles.sendButtonText}>Enviar</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
+
+const localStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    width: '100%',
+  },
+  header: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 8,
+    marginBottom: 10,
+  },
+  headerTitle: {
+    fontWeight: 'bold',
+    color: '#E63946',
+    fontSize: 16,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  messagesArea: {
+    flex: 1,
+    marginBottom: 8,
+  },
+  bubble: {
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 8,
+    maxWidth: '85%',
+  },
+  systemBubble: {
+    alignSelf: 'center',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  myBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#E63946',
+  },
+  operatorBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#1E3A8A',
+  },
+  otherBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F1F5F9',
+  },
+  senderLabel: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#94A3B8',
+    marginBottom: 2,
+  },
+  messageText: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  systemText: {
+    color: '#92400E',
+    fontWeight: '500',
+  },
+  myText: {
+    color: '#FFFFFF',
+  },
+  otherText: {
+    color: '#1E293B',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 8,
+  },
+  textInput: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    height: 44,
+    color: '#0F172A',
+    fontSize: 14,
+  },
+  sendButton: {
+    marginLeft: 8,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+});

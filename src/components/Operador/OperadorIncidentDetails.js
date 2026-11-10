@@ -1,175 +1,158 @@
-// src/components/Operador/OperadorIncidentDetails.js
-import { Ionicons } from '@expo/vector-icons'; 
+import { Ionicons } from '@expo/vector-icons';
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { Alert, KeyboardAvoidingView, Platform, Text, TouchableOpacity, View } from 'react-native';
-import { db } from '../../firebaseConfig'; 
+import { Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-// IMPORTA OS DOIS CHATS
+import { db } from '../../firebaseConfig';
 import EmergencyChat from '../Vitima/EmergencyChat';
 import MantimentosChat from '../Mantimentos/MantimentosChat';
 
 export default function IncidentDetails({ incident, onBack, currentUserId }) {
-  if (!incident) return null; 
+  if (!incident) return null;
 
   const isCritical = incident.detalhes?.criancas || incident.detalhes?.gravida;
   const isMantimento = incident.tipoAlerta === 'MANTIMENTO';
-
-  // Coleção onde vamos guardar os dados dependendo do tipo
   const collectionName = isMantimento ? 'pedidos_mantimentos' : 'sos_requests';
 
-  // --- FUNÇÕES DE GESTÃO DO PEDIDO DE CANCELAMENTO ---
   const handleApproveCancel = async () => {
     Alert.alert(
-      "Confirmar Cancelamento",
-      "Tem a certeza que deseja encerrar esta ocorrência?",
+      'Encerrar Ocorrência',
+      'Confirma que esta ocorrência deve ser dada como concluída e arquivada?',
       [
-        { text: "Não", style: "cancel" },
-        { text: "Sim, Encerrar", onPress: async () => {
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sim, Encerrar',
+          style: 'destructive',
+          onPress: async () => {
             try {
-              // Atualiza o estado
               await updateDoc(doc(db, collectionName, incident.id), {
-                status: 'concluido', 
-                cancelRequested: false
+                status: 'concluido',
+                cancelRequested: false,
+                closedAt: new Date().toISOString(),
+                closedBy: currentUserId,
               });
-              
-              // Envia mensagem final
+
               await addDoc(collection(db, collectionName, incident.id, 'messages'), {
                 senderId: currentUserId,
                 senderRole: 'operador',
-                text: '✅ O operador confirmou o seu pedido. A ocorrência foi encerrada com sucesso.',
-                timestamp: serverTimestamp()
+                text: '✅ Ocorrência validada e encerrada pela Central de Operações.',
+                timestamp: serverTimestamp(),
               });
 
-              if(onBack) onBack(); 
-
+              if (onBack) onBack();
             } catch (error) {
-              Alert.alert("Erro", "Não foi possível cancelar a ocorrência.");
+              console.warn('[IncidentDetails] Erro ao encerrar ocorrência:', error);
+              Alert.alert('Erro', 'Não foi possível encerrar a ocorrência.');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
   const handleRejectCancel = async () => {
     Alert.alert(
-      "Recusar Cancelamento",
-      "Vai manter o pedido ativo e ignorar o pedido da vítima.",
+      'Recusar Cancelamento',
+      'Manter a ocorrência em acompanhamento ativo na Central de Operações?',
       [
-        { text: "Voltar", style: "cancel" },
-        { text: "Confirmar", onPress: async () => {
+        { text: 'Voltar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          onPress: async () => {
             try {
               await updateDoc(doc(db, collectionName, incident.id), {
-                cancelRequested: false
+                cancelRequested: false,
               });
-              
+
               await addDoc(collection(db, collectionName, incident.id, 'messages'), {
                 senderId: currentUserId,
                 senderRole: 'operador',
-                text: '⚠️ O seu pedido de cancelamento foi recusado pelo operador por motivos de segurança. A ocorrência continua ATIVA e a central está a acompanhar.',
-                timestamp: serverTimestamp()
+                text: '⚠️ Pedido de cancelamento avaliado pelo operador. A ocorrência mantém-se ATIVA por motivos de segurança.',
+                timestamp: serverTimestamp(),
               });
-
             } catch (error) {
-              Alert.alert("Erro", "Não foi possível processar a recusa.");
+              console.warn('[IncidentDetails] Erro ao recusar cancelamento:', error);
+              Alert.alert('Erro', 'Não foi possível processar a resposta.');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0} 
-      style={{ flex: 1, backgroundColor: '#F4F6F7' }} 
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+      style={{ flex: 1, backgroundColor: '#F8FAFC' }}
     >
-      {/* 1. NAVBAR SUPERIOR (ESTILO NATIVO CENTRADO) */}
-      <View style={{ 
-        paddingTop: Platform.OS === 'ios' ? 55 : 20, 
-        paddingBottom: 15,
-        backgroundColor: '#FFFFFF',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center', 
-        borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
-        zIndex: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        elevation: 3,
-        position: 'relative' 
-      }}>
-        
-        <TouchableOpacity 
-          onPress={onBack} 
-          style={{ 
-            position: 'absolute', 
-            left: 10, 
-            bottom: 10, 
-            flexDirection: 'row', 
-            alignItems: 'center', 
-            padding: 5,
-            zIndex: 20
-          }}
-        >
+      {/* Barra Superior */}
+      <View style={localStyles.topBar}>
+        <TouchableOpacity onPress={onBack} style={localStyles.backButton} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={26} color="#3B82F6" />
-          <Text style={{ fontSize: 17, color: '#3B82F6', fontWeight: '500', marginLeft: -2 }}>Voltar</Text>
+          <Text style={localStyles.backButtonText}>Voltar</Text>
         </TouchableOpacity>
 
-        <Text 
-          style={{ fontSize: 18, fontWeight: '700', color: isMantimento ? '#3B82F6' : '#1F2937', maxWidth: '50%', textAlign: 'center' }} 
-          numberOfLines={1}
-        >
-          {incident.userName}
+        <Text style={[localStyles.barTitle, { color: isMantimento ? '#3B82F6' : '#1E293B' }]} numberOfLines={1}>
+          {incident.userName || 'Ocorrência'}
         </Text>
       </View>
 
-      {/* 2. ÁREA DE CONTEÚDO E CHAT */}
+      {/* Conteúdo e Triagem */}
       <View style={{ flex: 1 }}>
-        
-        {/* Painel Consolidado de Dados de Triagem */}
-        <View style={{ padding: 15, paddingBottom: 5 }}>
-          <View style={{ 
-            backgroundColor: '#FFF', padding: 16, borderRadius: 12, 
-            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, elevation: 2,
-            borderWidth: 1, borderColor: '#F3F4F6'
-          }}>
-            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#9CA3AF', marginBottom: 10, letterSpacing: 0.5 }}>
-              DADOS DE {isMantimento ? 'MANTIMENTOS' : 'TRIAGEM'}
+        <View style={{ padding: 14, paddingBottom: 6 }}>
+          <View style={localStyles.infoCard}>
+            <Text style={localStyles.cardHeaderLabel}>
+              DADOS DE {isMantimento ? 'MANTIMENTOS' : 'TRIAGEM DE EMERGÊNCIA'}
             </Text>
-            
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={{ fontSize: 16, marginRight: 8 }}>📍</Text>
-              <Text style={{ fontSize: 15, color: '#374151' }}><Text style={{ fontWeight: 'bold' }}>Coordenadas:</Text> {incident.latitude?.toFixed(5)}, {incident.longitude?.toFixed(5)}</Text>
+
+            <View style={localStyles.dataRow}>
+              <Text style={{ fontSize: 15, marginRight: 8 }}>📍</Text>
+              <Text style={localStyles.dataText}>
+                <Text style={{ fontWeight: 'bold' }}>Coordenadas:</Text>{' '}
+                {incident.latitude ? incident.latitude.toFixed(5) : 'N/A'},{' '}
+                {incident.longitude ? incident.longitude.toFixed(5) : 'N/A'}
+              </Text>
             </View>
-            
-            {/* Lógica condicional: Se for mantimento mostra descrição, se for SOS mostra idade */}
+
             {isMantimento ? (
               <>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                  <Text style={{ fontSize: 16, marginRight: 8 }}>📦</Text>
-                  <Text style={{ fontSize: 15, color: '#374151' }}><Text style={{ fontWeight: 'bold' }}>Pedido:</Text> {incident.detalhes?.descricao}</Text>
+                <View style={localStyles.dataRow}>
+                  <Text style={{ fontSize: 15, marginRight: 8 }}>📦</Text>
+                  <Text style={localStyles.dataText}>
+                    <Text style={{ fontWeight: 'bold' }}>Necessidades:</Text> {incident.detalhes?.descricao}
+                  </Text>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 16, marginRight: 8 }}>🔢</Text>
-                  <Text style={{ fontSize: 15, color: '#374151' }}><Text style={{ fontWeight: 'bold' }}>Qtd:</Text> {incident.detalhes?.quantidade}</Text>
+                <View style={localStyles.dataRow}>
+                  <Text style={{ fontSize: 15, marginRight: 8 }}>🔢</Text>
+                  <Text style={localStyles.dataText}>
+                    <Text style={{ fontWeight: 'bold' }}>Quantidade / Estimativa:</Text> {incident.detalhes?.quantidade}
+                  </Text>
                 </View>
               </>
             ) : (
               <>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                  <Text style={{ fontSize: 16, marginRight: 8 }}>🎂</Text>
-                  <Text style={{ fontSize: 15, color: '#374151' }}><Text style={{ fontWeight: 'bold' }}>Idade Declarada:</Text> {incident.detalhes?.idade || 'Não informada'}</Text>
+                <View style={localStyles.dataRow}>
+                  <Text style={{ fontSize: 15, marginRight: 8 }}>🎂</Text>
+                  <Text style={localStyles.dataText}>
+                    <Text style={{ fontWeight: 'bold' }}>Idade Informada:</Text>{' '}
+                    {incident.detalhes?.idade || 'Não informada'}
+                  </Text>
                 </View>
-                
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                  <Text style={{ fontSize: 16, marginRight: 8 }}>🚨</Text>
-                  <Text style={{ fontSize: 15, color: isCritical ? '#E74C3C' : '#27AE60', fontWeight: '600' }}>
-                    <Text style={{ color: '#374151', fontWeight: 'bold' }}>Estado: </Text>
-                    {incident.detalhes?.criancas ? "CRÍTICO (Crianças)" : incident.detalhes?.gravida ? "CRÍTICO (Grávida)" : "Atendimento Padrão"}
+
+                <View style={[localStyles.dataRow, { marginTop: 4 }]}>
+                  <Text style={{ fontSize: 15, marginRight: 8 }}>🚨</Text>
+                  <Text
+                    style={[
+                      localStyles.dataText,
+                      { color: isCritical ? '#E63946' : '#10B981', fontWeight: '600' },
+                    ]}
+                  >
+                    <Text style={{ color: '#334155', fontWeight: 'bold' }}>Prioridade:{' '}</Text>
+                    {incident.detalhes?.criancas
+                      ? 'CRÍTICA (Crianças no local)'
+                      : incident.detalhes?.gravida
+                      ? 'CRÍTICA (Grávida no local)'
+                      : 'PADRÃO OPERACIONAL'}
                   </Text>
                 </View>
               </>
@@ -177,27 +160,26 @@ export default function IncidentDetails({ incident, onBack, currentUserId }) {
           </View>
         </View>
 
-        {/* BANNER DE PEDIDO DE CANCELAMENTO */}
+        {/* Alerta de Cancelamento Solicitado */}
         {incident.cancelRequested && (
-          <View style={{
-            backgroundColor: '#FEF2F2', borderColor: '#EF4444', borderWidth: 2, 
-            borderRadius: 10, padding: 15, marginHorizontal: 15, marginTop: 10, marginBottom: 5
-          }}>
-            <Text style={{ color: '#B91C1C', fontWeight: 'bold', fontSize: 15, marginBottom: 12, textAlign: 'center' }}>
-              🚨 A VÍTIMA SOLICITOU O CANCELAMENTO!
+          <View style={localStyles.cancelAlertBox}>
+            <Text style={localStyles.cancelAlertText}>
+              ⚠️ O Cidadão solicitou o cancelamento desta ocorrência.
             </Text>
-            
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <TouchableOpacity 
-                style={{ flex: 1, backgroundColor: '#4B5563', padding: 12, borderRadius: 8, marginRight: 5, alignItems: 'center' }}
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+              <TouchableOpacity
+                style={localStyles.btnRejectCancel}
                 onPress={handleRejectCancel}
+                activeOpacity={0.8}
               >
-                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Recusar / Manter</Text>
+                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Manter Ativo</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={{ flex: 1, backgroundColor: '#EF4444', padding: 12, borderRadius: 8, marginLeft: 5, alignItems: 'center' }}
+              <TouchableOpacity
+                style={localStyles.btnApproveCancel}
                 onPress={handleApproveCancel}
+                activeOpacity={0.8}
               >
                 <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Encerrar</Text>
               </TouchableOpacity>
@@ -205,34 +187,127 @@ export default function IncidentDetails({ incident, onBack, currentUserId }) {
           </View>
         )}
 
-        {/* Módulo de Mensagens Dinâmico */}
-        <View style={{ flex: 1, paddingHorizontal: 10, paddingTop: 5 }}>
+        {/* Módulo de Mensagens em Tempo Real */}
+        <View style={{ flex: 1, paddingHorizontal: 12, paddingTop: 4 }}>
           {incident.status === 'pendente' ? (
-            // A MAGIA ACONTECE AQUI: Escolhe qual componente de chat renderizar
             isMantimento ? (
-              <MantimentosChat 
-                mantimentoId={incident.id} 
-                currentUserRole="operador" 
-                currentUserId={currentUserId} 
+              <MantimentosChat
+                mantimentoId={incident.id}
+                currentUserRole="operador"
+                currentUserId={currentUserId}
               />
             ) : (
-              <EmergencyChat 
-                sosId={incident.id} 
-                currentUserRole="operador" 
-                currentUserId={currentUserId} 
+              <EmergencyChat
+                sosId={incident.id}
+                currentUserRole="operador"
+                currentUserId={currentUserId}
               />
             )
           ) : (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-              <Text style={{ fontSize: 40, marginBottom: 10 }}>✅</Text>
-              <Text style={{ color: '#27AE60', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>
-                Ocorrência encerrada. O chat foi arquivado.
+              <Text style={{ fontSize: 44, marginBottom: 12 }}>✅</Text>
+              <Text style={{ color: '#10B981', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>
+                Ocorrência encerrada. O registo foi concluído.
               </Text>
             </View>
           )}
         </View>
-
       </View>
     </KeyboardAvoidingView>
   );
 }
+
+const localStyles = StyleSheet.create({
+  topBar: {
+    paddingTop: Platform.OS === 'ios' ? 12 : 10,
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    position: 'relative',
+    elevation: 2,
+  },
+  backButton: {
+    position: 'absolute',
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 6,
+    zIndex: 10,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: '#3B82F6',
+    fontWeight: '600',
+    marginLeft: 2,
+  },
+  barTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    maxWidth: '55%',
+    textAlign: 'center',
+  },
+  infoCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  cardHeaderLabel: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#94A3B8',
+    marginBottom: 10,
+    letterSpacing: 0.5,
+  },
+  dataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  dataText: {
+    fontSize: 14,
+    color: '#334155',
+    flex: 1,
+  },
+  cancelAlertBox: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#EF4444',
+    borderWidth: 1.5,
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  cancelAlertText: {
+    color: '#B91C1C',
+    fontWeight: 'bold',
+    fontSize: 14,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  btnRejectCancel: {
+    flex: 1,
+    backgroundColor: '#64748B',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  btnApproveCancel: {
+    flex: 1,
+    backgroundColor: '#EF4444',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+});
